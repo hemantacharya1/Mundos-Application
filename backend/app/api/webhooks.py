@@ -66,31 +66,60 @@ async def handle_vapi_tool_calls(request: Request, db: Session = Depends(get_db)
     It executes tools and receives the final call report.
     """
     payload = await request.json()
-    
+
     # Safely get the message type using .get() to avoid KeyError
     message = payload.get('message', {})
     message_type = message.get('type')
     print(message_type)
+
     if message_type == 'tool-calls':
         print(message)
-        tool_call = message['tool_call']
-        tool_name = tool_call['name']
-        parameters = tool_call['parameters']
+        toolCalls = message.get("toolCalls", [])
         
-        print(f"Received tool call: {tool_name} with params: {parameters}")
+        # Handle multiple tool calls if present
+        results = []
+        for tool_call in toolCalls:
+            # Extract tool information from the nested structure
+            function_info = tool_call.get('function', {})
+            tool_name = function_info.get('name')
+            
+            # Parse arguments - they come as a JSON string
+            import json
+            arguments_str = function_info.get('arguments', '{}')
+            if isinstance(arguments_str, str):
+                try:
+                    parameters = json.loads(arguments_str)
+                except json.JSONDecodeError:
+                    print(f"Failed to parse arguments: {arguments_str}")
+                    parameters = {}
+            else:
+                parameters = arguments_str
+            
+            print(f"Received tool call: {tool_name} with params: {parameters}")
+            
+            result = None
+            if tool_name == 'get_plan_details':
+                result = clinic_tools.get_plan_details(**parameters)
+            elif tool_name == 'get_available_slots':
+                result = clinic_tools.get_available_slots(**parameters)
+            elif tool_name == 'book_appointment':
+                result = clinic_tools.book_appointment(**parameters)
+                # If booking is successful, update the lead's status
+                call_data = payload.get('call', {})
+                metadata = call_data.get('metadata', {})
+                lead_id = metadata.get('lead_id')
+                if lead_id:
+                    crud.update_lead_status(db, lead_id=lead_id, status=models.LeadStatusEnum.converted)
+            
+            # Store result with tool call ID for proper mapping
+            results.append({
+                "toolCallId": tool_call.get('id'),
+                "result": result
+            })
         
-        result = None
-        if tool_name == 'get_plan_details':
-            result = clinic_tools.get_plan_details(**parameters)
-        elif tool_name == 'get_available_slots':
-            result = clinic_tools.get_available_slots(**parameters)
-        elif tool_name == 'book_appointment':
-            result = clinic_tools.book_appointment(**parameters)
-            # If booking is successful, update the lead's status
-            lead_id = payload['call']['metadata']['lead_id']
-            crud.update_lead_status(db, lead_id=lead_id, status=models.LeadStatusEnum.converted)
-
-        return {"result": result}
+        # Return results - VAPI expects this format for multiple tool calls
+        print(results)
+        return {"results": results}
 
     elif message_type == 'end-of-call-report':
         # Correctly access the 'report' key which is a direct child of 'message'
