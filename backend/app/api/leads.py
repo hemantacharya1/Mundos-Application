@@ -1,8 +1,11 @@
 import pandas as pd
 import io
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import Query, Body # Add these imports
+from ..agents.triage_agent import run_triage_agent # Ensure this is imported
+from ..utils import send_email # Ensure this is imported
 from sqlalchemy.orm import Session
-from .. import models, schemas, crud
+from .. import models, schemas, crud,voice_utils
 from ..database import get_db
 from datetime import datetime
 from fastapi import BackgroundTasks # Add this import
@@ -95,3 +98,134 @@ def update_lead_status_endpoint(
     
     updated_lead = crud.update_lead_status(db, lead_id=lead_id, status=status_update)
     return updated_lead
+
+# --- NEW ENDPOINTS ---
+
+@router.post("", response_model=schemas.Lead)
+def create_single_lead(
+    lead_data: schemas.LeadCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Creates a single lead from a form/JSON input."""
+    existing_lead = crud.get_lead_by_email(db, email=lead_data.email)
+    if existing_lead:
+        raise HTTPException(status_code=409, detail="A lead with this email already exists.")
+    
+    new_lead = crud.create_lead(db=db, lead=lead_data)
+    
+    background_tasks.add_task(run_triage_agent, lead_id=new_lead.id)
+    print(f"Scheduled AI Triage for manually created lead: {new_lead.lead_id}")
+    
+    return new_lead
+
+@router.get("", response_model=List[schemas.Lead])
+def get_all_leads(
+    status: models.LeadStatusEnum | None = Query(None),
+    search: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Gets a paginated and filterable list of all leads."""
+    leads = crud.get_leads(db, status=status, search=search, page=page, limit=limit)
+    return leads
+
+@router.get("/{lead_id}/communications", response_model=List[schemas.Communication]) # Assuming you create a Communication schema
+def get_lead_communications(lead_id: str, db: Session = Depends(get_db)):
+    """Gets the full communication history for a single lead."""
+    # First, ensure the lead exists
+    lead = crud.get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    return crud.get_communications_by_lead_id(db, lead_id=lead_id)
+
+@router.post("/{lead_id}/notes")
+def add_manual_note(
+    lead_id: str,
+    content: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """Adds a manual, internal note to a lead's history."""
+    lead = crud.get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    comm_log = schemas.CommunicationCreate(
+        lead_id=lead.id,
+        type=models.CommTypeEnum.note,
+        direction=models.CommDirectionEnum.outgoing_manual,
+        content=content
+    )
+    crud.create_communication_log(db, comm=comm_log)
+    return {"status": "success", "message": "Note added successfully."}
+
+@router.post("/{lead_id}/reply")
+def send_manual_reply(
+    lead_id: str,
+    content: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """Sends a manual email reply from the UI to a lead."""
+    lead = crud.get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    # Construct the tracking reply-to address
+    reply_domain = os.getenv("REPLY_DOMAIN")
+    tracking_reply_to = f"replies+{lead.id}@{reply_domain}"
+    subject = f"Re: Your inquiry with Bright Smile Clinic"
+
+    # Send the email
+    success = send_email(
+        to_email=lead.email,
+        subject=subject,
+        body=content,
+        reply_to_address=tracking_reply_to
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send email via SMTP service.")
+
+    # Log the manual reply
+    comm_log = schemas.CommunicationCreate(
+        lead_id=lead.id,
+        type=models.CommTypeEnum.email,
+        direction=models.CommDirectionEnum.outgoing_manual,
+        content=f"Subject: {subject}\n\n{content}"
+    )
+    crud.create_communication_log(db, comm=comm_log)
+    
+    return {"status": "success", "message": "Reply sent successfully."}
+
+
+@router.post("/{lead_id}/test-ai-call", tags=["Testing"])
+def test_tool_based_ai_call(lead_id: str, db: Session = Depends(get_db)):
+    """
+    [FOR TESTING ONLY] Initiates a full, tool-based AI voice call to a lead.
+    This allows for manual testing without waiting for the nurture scheduler.
+    """
+    print(f"--- INITIATING TEST CALL for Lead ID: {lead_id} ---")
+    lead = crud.get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if not lead.phone_number:
+        raise HTTPException(status_code=400, detail="Lead does not have a phone number.")
+
+    # Use the tool-based call function we designed
+    call_data = voice_utils.make_tool_based_vapi_call(lead)
+
+    if not call_data:
+        raise HTTPException(status_code=500, detail="Failed to initiate call via Vapi.")
+
+    # Log the initiation of the call
+    comm_log = schemas.CommunicationCreate(
+        lead_id=lead.id,
+        type=models.CommTypeEnum.phone_call,
+        direction=models.CommDirectionEnum.outgoing_auto,
+        content=f"[TEST] AI call initiated. Vapi Call ID: {call_data.get('id')}"
+    )
+    crud.create_communication_log(db, comm=comm_log)
+
+    return {"status": "success", "message": "Test AI call initiated.", "vapi_call_id": call_data.get('id')}

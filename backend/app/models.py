@@ -42,6 +42,8 @@ class Lead(Base):
 class CommTypeEnum(str, enum.Enum):
     email = "email"
     sms = "sms"
+    note = "note"
+    phone_call = "phone_call" # Add this new type
 
 class CommDirectionEnum(str, enum.Enum):
     outgoing_auto = "outgoing_auto"

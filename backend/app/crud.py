@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from . import models, schemas
 from datetime import datetime
+from sqlalchemy import or_
+from typing import List
 
 def get_lead_by_email(db: Session, email: str):
     return db.query(models.Lead).filter(models.Lead.email == email).first()
@@ -47,3 +49,31 @@ def create_communication_log(db: Session, comm: schemas.CommunicationCreate):
     db.commit()
     db.refresh(db_comm)
     return db_comm
+
+def get_leads(db: Session, status: models.LeadStatusEnum | None, search: str | None, page: int, limit: int) -> List[models.Lead]:
+    """Gets a paginated list of leads with optional filtering and searching."""
+    query = db.query(models.Lead)
+
+    if status:
+        query = query.filter(models.Lead.status == status)
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                models.Lead.first_name.ilike(search_term),
+                models.Lead.last_name.ilike(search_term),
+                models.Lead.email.ilike(search_term)
+            )
+        )
+    
+    # Apply ordering and pagination
+    query = query.order_by(models.Lead.created_at.desc())
+    offset = (page - 1) * limit
+    query = query.offset(offset).limit(limit)
+    
+    return query.all()
+
+def get_communications_by_lead_id(db: Session, lead_id: UUID) -> List[models.Communication]:
+    """Gets all communication logs for a specific lead, sorted chronologically."""
+    return db.query(models.Communication).filter(models.Communication.lead_id == lead_id).order_by(models.Communication.sent_at.asc()).all()

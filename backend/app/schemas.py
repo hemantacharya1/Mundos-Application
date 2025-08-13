@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from uuid import UUID
-from .models import LeadStatusEnum
+from .models import LeadStatusEnum,CommTypeEnum,CommDirectionEnum
 
 # Base schema for a lead's properties
 class LeadBase(BaseModel):
@@ -40,3 +40,13 @@ class CommunicationCreate(BaseModel):
     type: CommTypeEnum
     direction: CommDirectionEnum
     content: str
+
+class Communication(BaseModel):
+    id: UUID
+    type: CommTypeEnum
+    direction: CommDirectionEnum
+    content: str
+    sent_at: datetime
+
+    class Config:
+        orm_mode = True # This allows Pydantic to read data directly from the SQLAlchemy model

@@ -23,7 +23,22 @@ export const LeadList = ({ title, leads, onStatusChange }) => {
                         <h4>{lead.first_name} {lead.last_name}</h4>
                         <p><strong>Email:</strong> {lead.email}</p>
                         <p><strong>Phone:</strong> {lead.phone_number || 'N/A'}</p>
-                        <p><strong>Inquiry:</strong> {lead.inquiry_notes}</p>
+                        <p><strong>Original Inquiry:</strong> {lead.inquiry_notes}</p>
+                        
+                        {/* --- NEW DYNAMIC SECTION --- */}
+                        {lead.ai_summary && (
+                            <div className="ai-insights">
+                                <p><strong>AI Summary of Reply:</strong> {lead.ai_summary}</p>
+                                {lead.ai_drafted_reply && (
+                                    <div className="drafted-reply">
+                                        <strong>AI Drafted Reply:</strong>
+                                        <textarea readOnly defaultValue={lead.ai_drafted_reply}></textarea>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {/* --- END NEW SECTION --- */}
+
                         <div className="lead-actions">
                             <button onClick={() => handleUpdateStatus(lead.id, 'converted')}>Mark Converted</button>
                             <button onClick={() => handleUpdateStatus(lead.id, 'archived_not_interested')}>Archive</button>

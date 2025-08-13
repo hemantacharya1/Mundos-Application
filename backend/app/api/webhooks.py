@@ -3,7 +3,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks, Header
 from sqlalchemy.orm import Session
 
-from .. import crud, models
+from .. import crud, models,clinic_tools,schemas
 from ..database import get_db
 from ..agents.reply_agent import run_reply_analyzer
 
@@ -57,3 +57,62 @@ async def handle_email_reply(
     else:
         print(f"Lead {lead.lead_id} already has status '{lead.status}'. Ignoring duplicate reply.")
         return {"status": "ignored", "message": "Duplicate or non-nurturing reply."}
+    
+
+@router.post("/vapi-tool-handler")
+async def handle_vapi_tool_calls(request: Request, db: Session = Depends(get_db)):
+    """
+    This single endpoint handles all messages from Vapi during a call.
+    It executes tools and receives the final call report.
+    """
+    payload = await request.json()
+    
+    # Safely get the message type using .get() to avoid KeyError
+    message = payload.get('message', {})
+    message_type = message.get('type')
+    print(message_type)
+    if message_type == 'tool-calls':
+        print(message)
+        tool_call = message['tool_call']
+        tool_name = tool_call['name']
+        parameters = tool_call['parameters']
+        
+        print(f"Received tool call: {tool_name} with params: {parameters}")
+        
+        result = None
+        if tool_name == 'get_plan_details':
+            result = clinic_tools.get_plan_details(**parameters)
+        elif tool_name == 'get_available_slots':
+            result = clinic_tools.get_available_slots(**parameters)
+        elif tool_name == 'book_appointment':
+            result = clinic_tools.book_appointment(**parameters)
+            # If booking is successful, update the lead's status
+            lead_id = payload['call']['metadata']['lead_id']
+            crud.update_lead_status(db, lead_id=lead_id, status=models.LeadStatusEnum.converted)
+
+        return {"result": result}
+
+    elif message_type == 'end-of-call-report':
+        # Correctly access the 'report' key which is a direct child of 'message'
+        report_data = message.get('report', {})
+        
+        call_data = payload.get('call', {})
+        metadata = call_data.get('metadata', {})
+        lead_id = metadata.get('lead_id')
+        
+        if lead_id:
+            summary = f"Call Summary: {report_data.get('summary', 'N/A')}\n\nTranscript:\n{report_data.get('transcript', 'N/A')}"
+            
+            # Log the entire summary and transcript
+            comm_log = schemas.CommunicationCreate(
+                lead_id=lead_id,
+                type=models.CommTypeEnum.phone_call,
+                direction=models.CommDirectionEnum.incoming, # It's a report about the call
+                content=summary
+            )
+            crud.create_communication_log(db, comm=comm_log)
+            print(f"Saved call report for lead {lead_id}")
+        
+        return {"status": "report received"}
+
+    return {"status": "message received"}

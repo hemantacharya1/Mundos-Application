@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime,timezone,timedelta
 
-from .. import crud, models, schemas
+from .. import crud, models, schemas,voice_utils
 from ..database import SessionLocal
 from ..utils import send_email,send_sms
 from ..models import LeadStatusEnum, CommTypeEnum, CommDirectionEnum
@@ -45,10 +45,25 @@ def nurture_and_recall_job():
                 #         content=body
                 #     ))
                 #     db.commit()
-
-            # --- Attempt 3: Final Email (3 days after last attempt) ---
-            elif lead.nurture_attempts == 2 and time_since_last_update > timedelta(minutes=1):
-                print(f"Processing Attempt 3 (Final Email) for Lead ID: {lead.lead_id}")
+            # --- Attempt 3: AI Phone Call (3 days after last attempt) ---
+            elif lead.nurture_attempts == 2 and time_since_last_update > timedelta(days=3):
+                print(f"Processing Attempt 3 (AI Phone Call) for Lead ID: {lead.lead_id}")
+                
+                if lead.phone_number:
+                    call_data = voice_utils.make_tool_based_vapi_call(lead)
+                    if call_data:
+                        lead.nurture_attempts += 1
+                        # Log the initiation of the call
+                        crud.create_communication_log(db, schemas.CommunicationCreate(
+                            lead_id=lead.id,
+                            type=models.CommTypeEnum.phone_call,
+                            direction=models.CommDirectionEnum.outgoing_auto,
+                            content=f"AI call initiated. Vapi Call ID: {call_data.get('id')}"
+                        ))
+                        db.commit()
+            # --- Attempt 3: Final Email (4 days after last attempt) ---
+            elif lead.nurture_attempts == 3 and time_since_last_update > timedelta(minutes=1):
+                print(f"Processing Attempt 4 (Final Email) for Lead ID: {lead.lead_id}")
                 subject = "A quick question from Bright Smile Clinic"
                 body = f"Hi {lead.first_name},\n\nWe haven't heard back and wanted to make one last reach-out. We're currently offering a complimentary consultation for new patients if you're still interested.\n\nThis will be our last automated message. We wish you the best!\n\nSincerely,\nThe Bright Smile Clinic Team"
                 
