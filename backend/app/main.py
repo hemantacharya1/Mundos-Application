@@ -33,18 +33,18 @@ app.add_middleware(
 # --- Scheduler Setup ---
 scheduler = BackgroundScheduler()
 
-# @app.on_event("startup")
-# def start_scheduler():
-#     # For testing, run the job every 1 minute.
-#     # For production, you would change this to 'cron', day_of_week='mon-sun', hour=9
-#     scheduler.add_job(nurture_and_recall_job, 'interval', minutes=10, id="nurture_job")
-#     scheduler.start()
-#     print("Scheduler started... Nurture job will run every 10 minute for testing.")
+@app.on_event("startup")
+def start_scheduler():
+    # For testing, run the job every 1 minute.
+    # For production, you would change this to 'cron', day_of_week='mon-sun', hour=9
+    scheduler.add_job(nurture_and_recall_job, 'interval', minutes=10, id="nurture_job")
+    scheduler.start()
+    print("Scheduler started... Nurture job will run every 10 minute for testing.")
 
-# @app.on_event("shutdown")
-# def shutdown_scheduler():
-#     scheduler.shutdown()
-#     print("Scheduler shut down.")
+@app.on_event("shutdown")
+def shutdown_scheduler():
+    scheduler.shutdown()
+    print("Scheduler shut down.")
 
 # Include the router from our leads API file
 app.include_router(webhooks.router, prefix="/api")
