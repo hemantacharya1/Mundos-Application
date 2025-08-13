@@ -1,0 +1,36 @@
+import React from 'react';
+import { updateLeadStatus } from '../api';
+
+export const LeadList = ({ title, leads, onStatusChange }) => {
+    const handleUpdateStatus = async (leadId, newStatus) => {
+        try {
+            await updateLeadStatus(leadId, newStatus);
+            onStatusChange(); // Refresh the dashboard
+        } catch (error) {
+            console.error(`Failed to update status for lead ${leadId}:`, error);
+            alert('Failed to update lead status.');
+        }
+    };
+
+    return (
+        <div className="lead-list">
+            <h3>{title} ({leads.length})</h3>
+            {leads.length === 0 ? (
+                <p>No leads in this queue.</p>
+            ) : (
+                leads.map((lead) => (
+                    <div key={lead.id} className="lead-card">
+                        <h4>{lead.first_name} {lead.last_name}</h4>
+                        <p><strong>Email:</strong> {lead.email}</p>
+                        <p><strong>Phone:</strong> {lead.phone_number || 'N/A'}</p>
+                        <p><strong>Inquiry:</strong> {lead.inquiry_notes}</p>
+                        <div className="lead-actions">
+                            <button onClick={() => handleUpdateStatus(lead.id, 'converted')}>Mark Converted</button>
+                            <button onClick={() => handleUpdateStatus(lead.id, 'archived_not_interested')}>Archive</button>
+                        </div>
+                    </div>
+                ))
+            )}
+        </div>
+    );
+};

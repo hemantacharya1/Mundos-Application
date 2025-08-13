@@ -1,0 +1,58 @@
+# ----------------------
+# Global ignores
+# ----------------------
+
+# Environment files
+.env
+**/.env
+
+# Python virtual environments
+venv/
+env/
+ENV/
+**/venv/
+**/env/
+**/ENV/
+
+# Node.js dependencies
+node_modules/
+**/node_modules/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+
+# macOS system files
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build and dist folders
+dist/
+build/
+**/dist/
+**/build/
+
+# IDE/project files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Coverage/testing output
+coverage/
+*.coverage
+.cache/
+.pytest_cache/
+
+# Temporary files
+tmp/
+temp/

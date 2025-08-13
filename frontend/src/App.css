@@ -1,0 +1,92 @@
+:root {
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+    background-color: #f0f4f8;
+    color: #2c3e50;
+}
+
+.App {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.App-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    color: #1a73e8;
+}
+
+.upload-container {
+    background-color: #ffffff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.upload-container h2 {
+    margin-top: 0;
+}
+
+button {
+    background-color: #1a73e8;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+}
+
+button:disabled {
+    background-color: #a0c3f0;
+    cursor: not-allowed;
+}
+
+button:hover:not(:disabled) {
+    background-color: #155ab6;
+}
+
+input[type="file"] {
+    margin-right: 1rem;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #e0e0e0;
+    margin: 2rem 0;
+}
+
+.queues-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.lead-list {
+    background-color: #ffffff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.lead-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.lead-card h4 {
+    margin-top: 0;
+}
+
+.lead-actions button {
+    margin-right: 0.5rem;
+    background-color: #34a853;
+}
+
+.lead-actions button:last-child {
+    background-color: #ea4335;
+}
