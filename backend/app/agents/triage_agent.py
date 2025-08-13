@@ -7,7 +7,7 @@ import json
 
 from .. import crud, schemas
 from ..database import SessionLocal
-from ..utils import send_email
+from ..utils import send_email,send_whatsapp
 from ..models import LeadStatusEnum, CommTypeEnum, CommDirectionEnum
 
 # --- Pydantic model for structured output from the LLM ---
@@ -104,6 +104,9 @@ def action_node(state: GraphState):
             body=state['email_body'],
             reply_to_address=tracking_reply_to # Pass it here
         )
+        body = f"Hi {db_lead.first_name}, it's the team from Bright Smile Clinic. Just checking in to see if you had any questions. You can reply to this message or call us."
+        if send_whatsapp(db_lead.phone_number,body=body):
+            print("Whatsapp message done ")
         
         # 3. Log the communication
         comm_log = schemas.CommunicationCreate(

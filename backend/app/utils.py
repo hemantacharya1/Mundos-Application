@@ -57,3 +57,31 @@ def send_sms(to_number: str, body: str) -> bool:
     except Exception as e:
         print(f"Failed to send SMS to {to_number}. Error: {e}")
         return False
+    
+def send_whatsapp(to_number: str, body: str) -> bool:
+    """
+    Sends an SMS message using the Twilio client.
+    """
+    try:
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        from_number = os.getenv("TWILIO_PHONE_NUMBER")
+        from_number = f"whatsapp:+14155238886"
+        to_number = f"whatsapp:{to_number}"
+       
+        if not account_sid or not auth_token or not from_number:
+            print("Error: Twilio environment variables are not set.")
+            return False
+
+        client = Client(account_sid, auth_token)
+        
+        message = client.messages.create(
+            body=body,
+            from_=from_number,
+            to=to_number
+        )
+        print(f"whatsapp message sent successfully to {to_number}. SID: {message.sid}")
+        return True
+    except Exception as e:
+        print(f"Failed to send whatsapp message to {to_number}. Error: {e}")
+        return False
