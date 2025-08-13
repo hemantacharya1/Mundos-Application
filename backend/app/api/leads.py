@@ -1,5 +1,6 @@
 import pandas as pd
 import io
+import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi import Query, Body # Add these imports
 from ..agents.triage_agent import run_triage_agent # Ensure this is imported
@@ -71,17 +72,17 @@ def upload_leads_csv(
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the file: {e}")
     
 
-@router.get("/", response_model=List[schemas.Lead])
-def read_leads(status: schemas.LeadStatusEnum | None = None, db: Session = Depends(get_db)):
-    """
-    Retrieves a list of leads.
-    Can be filtered by status (e.g., 'needs_immediate_attention', 'responded').
-    """
-    if status:
-        leads = db.query(models.Lead).filter(models.Lead.status == status).order_by(models.Lead.created_at.desc()).all()
-    else:
-        leads = db.query(models.Lead).order_by(models.Lead.created_at.desc()).all()
-    return leads
+# @router.get("/", response_model=List[schemas.Lead])
+# def read_leads(status: schemas.LeadStatusEnum | None = None, db: Session = Depends(get_db)):
+#     """
+#     Retrieves a list of leads.
+#     Can be filtered by status (e.g., 'needs_immediate_attention', 'responded').
+#     """
+#     if status:
+#         leads = db.query(models.Lead).filter(models.Lead.status == status).order_by(models.Lead.created_at.desc()).all()
+#     else:
+#         leads = db.query(models.Lead).order_by(models.Lead.created_at.desc()).all()
+#     return leads
 
 @router.put("/{lead_id}/status", response_model=schemas.Lead)
 def update_lead_status_endpoint(
@@ -130,6 +131,14 @@ def get_all_leads(
     """Gets a paginated and filterable list of all leads."""
     leads = crud.get_leads(db, status=status, search=search, page=page, limit=limit)
     return leads
+
+@router.get("/{lead_id}", response_model=schemas.Lead)
+def get_single_lead(lead_id: str, db: Session = Depends(get_db)):
+    """Gets a single lead by UUID."""
+    lead = crud.get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return lead
 
 @router.get("/{lead_id}/communications", response_model=List[schemas.Communication]) # Assuming you create a Communication schema
 def get_lead_communications(lead_id: str, db: Session = Depends(get_db)):

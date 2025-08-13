@@ -170,6 +170,10 @@ class ApiService {
   }
 
   // Leads endpoints
+  async getLead(leadId: string): Promise<Lead> {
+    return this.request<Lead>(`/api/leads/${leadId}`)
+  }
+
   async getLeads(params?: {
     status?: LeadStatus;
     search?: string;
@@ -183,37 +187,32 @@ class ApiService {
     if (params?.limit) searchParams.append('limit', params.limit.toString());
 
     const queryString = searchParams.toString();
-    const endpoint = `/api/leads/leads${queryString ? `?${queryString}` : ''}`;
+    const endpoint = `/api/leads${queryString ? `?${queryString}` : ''}`;
     
     return this.request<Lead[]>(endpoint);
   }
 
   async createLead(lead: LeadCreate): Promise<Lead> {
-    return this.request<Lead>('/api/leads/leads', {
+    return this.request<Lead>('/api/leads', {
       method: 'POST',
       body: JSON.stringify(lead),
     });
   }
 
   async updateLeadStatus(leadId: string, status: LeadStatus): Promise<Lead> {
-    return this.request<Lead>(`/api/leads/leads/${leadId}/status?status_update=${status}`, {
+    return this.request<Lead>(`/api/leads/${leadId}/status?status_update=${status}`, {
       method: 'PUT',
     });
   }
 
   async getLeadCommunications(leadId: string): Promise<Communication[]> {
-    return this.request<Communication[]>(`/api/leads/leads/${leadId}/communications`);
+    return this.request<Communication[]>(`/api/leads/${leadId}/communications`);
   }
 
-  async addManualNote(leadId: string, content: string): Promise<void> {
-    return this.request<void>(`/api/leads/leads/${leadId}/notes`, {
-      method: 'POST',
-      body: JSON.stringify({ content }),
-    });
-  }
+
 
   async sendManualReply(leadId: string, content: string): Promise<void> {
-    return this.request<void>(`/api/leads/leads/${leadId}/reply`, {
+    return this.request<void>(`/api/leads/${leadId}/reply`, {
       method: 'POST',
       body: JSON.stringify({ content }),
     });
@@ -223,7 +222,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const url = `${this.baseUrl}/api/leads/leads/upload`;
+    const url = `${this.baseUrl}/api/leads/upload`;
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
@@ -238,7 +237,7 @@ class ApiService {
 
   // Testing endpoints
   async testAiCall(leadId: string): Promise<void> {
-    return this.request<void>(`/api/leads/leads/${leadId}/test-ai-call`, {
+    return this.request<void>(`/api/leads/${leadId}/test-ai-call`, {
       method: 'POST',
     });
   }
