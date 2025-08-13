@@ -72,7 +72,6 @@ async def handle_vapi_tool_calls(request: Request, db: Session = Depends(get_db)
     message_type = message.get('type')
 
     if message_type == 'tool-calls':
-        print(message)
         toolCalls = message.get("toolCalls", [])
         
         # Handle multiple tool calls if present
@@ -94,22 +93,24 @@ async def handle_vapi_tool_calls(request: Request, db: Session = Depends(get_db)
             else:
                 parameters = arguments_str
             
+            # --- THIS IS THE NEW PART ---
+            # Get the lead_id from the call's metadata to pass to the tool
+            lead_id = message.get('call', {}).get('metadata', {}).get('lead_id')
+
             print(f"Received tool call: {tool_name} with params: {parameters}")
-            
+
             result = None
             if tool_name == 'get_plan_details':
                 result = clinic_tools.get_plan_details(**parameters)
             elif tool_name == 'get_available_slots':
                 result = clinic_tools.get_available_slots(**parameters)
             elif tool_name == 'book_appointment':
-                result = clinic_tools.book_appointment(**parameters)
-                # If booking is successful, update the lead's status
-                call_data = payload.get('call', {})
-                metadata = call_data.get('metadata', {})
-                lead_id = metadata.get('lead_id')
-                if lead_id:
-                    crud.update_lead_status(db, lead_id=lead_id, status=models.LeadStatusEnum.converted)
-            
+                if not lead_id:
+                    result = "I'm sorry, I seem to have a technical issue and can't access your file to book the appointment. Please call our office directly."
+                else:
+                    # Pass the lead_id to the booking function
+                    result = clinic_tools.book_appointment(**parameters, lead_id=lead_id)
+    
             # Store result with tool call ID for proper mapping
             results.append({
                 "toolCallId": tool_call.get('id'),

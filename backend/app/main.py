@@ -2,7 +2,7 @@ from fastapi import FastAPI,Request
 from apscheduler.schedulers.background import BackgroundScheduler # Import scheduler
 from .database import engine
 from . import models
-from .api import leads,webhooks,dashboard
+from .api import leads,webhooks,dashboard,appointments 
 from .scheduler.nurture_engine import nurture_and_recall_job # Import our job
 from fastapi.middleware.cors import CORSMiddleware # Import CORS Middleware
 
@@ -50,6 +50,7 @@ scheduler = BackgroundScheduler()
 app.include_router(webhooks.router, prefix="/api")
 app.include_router(leads.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api") 
+app.include_router(appointments.router, prefix="/api")
 
 @app.get("/", tags=["Root"])
 def read_root():
