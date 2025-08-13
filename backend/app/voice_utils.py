@@ -1,7 +1,7 @@
 import os
 import requests
 from .models import Lead
-from .agents.prompt import DENTAL_CLINIC_TOOL_PROMPT
+from .agents.prompt import REFINED_DENTAL_PROMPT
 
 VAPI_API_URL = "https://api.vapi.ai/call/phone"
 HEADERS = {
@@ -54,7 +54,15 @@ def make_tool_based_vapi_call(lead: Lead):
             "server": {"url": tool_handler_url}
         }
     ]
+    # 1. Prepare the contextual data with fallbacks for safety
+    lead_name = lead.first_name or "the customer"
+    # Provide a generic fallback if the inquiry notes are empty
+    inquiry_notes = lead.inquiry_notes or "your dental health needs"
 
+    # 2. Dynamically create the system prompt by replacing placeholders
+    system_prompt = REFINED_DENTAL_PROMPT.replace("{LEAD_NAME}", lead_name)
+    system_prompt = system_prompt.replace("{LEAD_INQUIRY_NOTES}", inquiry_notes)
+    system_prompt = system_prompt.replace("{DATE}",str(lead.created_at))
     # Construct the final payload according to the new structure
     payload = {
         "phoneNumberId": os.getenv("VAPI_PHONE_NUMBER_ID"),
@@ -74,9 +82,10 @@ def make_tool_based_vapi_call(lead: Lead):
             "model": {
                 "provider": "openai",
                 "model": "gpt-4o",
-                "systemPrompt": DENTAL_CLINIC_TOOL_PROMPT,
+                "systemPrompt": system_prompt,
                 "tools": tools
-            }
+            },
+            "serverUrl":tool_handler_url
         }
     }
 

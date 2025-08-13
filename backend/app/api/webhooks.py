@@ -70,7 +70,6 @@ async def handle_vapi_tool_calls(request: Request, db: Session = Depends(get_db)
     # Safely get the message type using .get() to avoid KeyError
     message = payload.get('message', {})
     message_type = message.get('type')
-    print(message_type)
 
     if message_type == 'tool-calls':
         print(message)
@@ -122,16 +121,14 @@ async def handle_vapi_tool_calls(request: Request, db: Session = Depends(get_db)
         return {"results": results}
 
     elif message_type == 'end-of-call-report':
-        # Correctly access the 'report' key which is a direct child of 'message'
-        report_data = message.get('report', {})
-        
-        call_data = payload.get('call', {})
-        metadata = call_data.get('metadata', {})
-        lead_id = metadata.get('lead_id')
-        
+        # Correctly access the 'report' key which is a direct child of 'message'\
+        analysis = message.get('analysis', {})
+        summary = analysis.get('summary')
+        call_data=message.get('call')
+        metadata=call_data.get('metadata')
+        lead_id=metadata.get('lead_id')
         if lead_id:
-            summary = f"Call Summary: {report_data.get('summary', 'N/A')}\n\nTranscript:\n{report_data.get('transcript', 'N/A')}"
-            
+            summary = f"Call Summary: {summary}"
             # Log the entire summary and transcript
             comm_log = schemas.CommunicationCreate(
                 lead_id=lead_id,

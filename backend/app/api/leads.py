@@ -219,13 +219,14 @@ def test_tool_based_ai_call(lead_id: str, db: Session = Depends(get_db)):
     if not call_data:
         raise HTTPException(status_code=500, detail="Failed to initiate call via Vapi.")
 
+    vapi_call_id=call_data.get('results')[0].get('id')
     # Log the initiation of the call
     comm_log = schemas.CommunicationCreate(
         lead_id=lead.id,
         type=models.CommTypeEnum.phone_call,
         direction=models.CommDirectionEnum.outgoing_auto,
-        content=f"[TEST] AI call initiated. Vapi Call ID: {call_data.get('id')}"
+        content=f"[TEST] AI call initiated. Vapi Call ID: {vapi_call_id}"
     )
     crud.create_communication_log(db, comm=comm_log)
 
-    return {"status": "success", "message": "Test AI call initiated.", "vapi_call_id": call_data.get('id')}
+    return {"status": "success", "message": "Test AI call initiated.", "vapi_call_id":vapi_call_id}
