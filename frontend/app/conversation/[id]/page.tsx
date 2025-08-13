@@ -19,12 +19,10 @@ import {
   Bot,
   User,
   Send,
-  AlertTriangle,
   UserCheck,
-  ArrowUp,
-  Edit3,
   RefreshCw,
   AlertCircle,
+  PhoneCall,
 } from "lucide-react"
 import { useConversation } from "@/hooks/use-conversation"
 import { 
@@ -38,6 +36,8 @@ import {
 } from "@/lib/conversation-utils"
 import { useState, use } from "react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { useToast } from "@/hooks/use-toast"
+import { apiService } from "@/lib/api"
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -45,6 +45,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [messageInput, setMessageInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [isCalling, setIsCalling] = useState(false);
+  const { toast } = useToast();
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || isSending) return;
@@ -70,10 +72,33 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     setLastRefreshed(new Date());
   };
 
+  const handleCall = async () => {
+    if (!lead || isCalling) return;
+    
+    setIsCalling(true);
+    try {
+      await apiService.testAiCall(lead.id);
+      toast({
+        title: "Call Initiated",
+        description: "AI call has been started successfully. The lead will receive a call shortly.",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Failed to initiate call:", error);
+      toast({
+        title: "Call Failed",
+        description: "Failed to initiate AI call. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCalling(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <LayoutWrapper>
-        <div className="h-[calc(100vh-3rem)] flex flex-col px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
+        <div className="h-[calc(100vh-1rem)] flex flex-col px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
           <div className="flex items-center gap-4 mb-4 flex-shrink-0">
             <Link href="/leads">
               <Button variant="ghost" size="sm" className="gap-2">
@@ -135,7 +160,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   if (error || !lead) {
     return (
       <LayoutWrapper>
-        <div className="h-[calc(100vh-3rem)] flex flex-col px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
+        <div className="h-[calc(100vh-1rem)] flex flex-col px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
           <div className="flex items-center gap-4 mb-4 flex-shrink-0">
             <Link href="/leads">
               <Button variant="ghost" size="sm" className="gap-2">
@@ -178,7 +203,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   return (
     <LayoutWrapper>
-      <div className="h-[calc(100vh-3rem)] flex flex-col px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
+      <div className="h-[calc(100vh-0.1rem)] flex flex-col px-4 lg:px-6 pt-4 lg:pt-6 pb-2">
         {/* Header - Fixed */}
         <div className="flex items-center gap-4 mb-4 flex-shrink-0">
           <Link href="/leads">
@@ -203,7 +228,12 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         {/* Main Content - Flexible */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0">
           {/* Lead Information Sidebar - Compact */}
-          <div className="lg:col-span-1 space-y-3 overflow-y-auto">
+          <div className="lg:col-span-1 space-y-3 overflow-y-auto"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+          }}
+          >
             {/* Lead Profile - Compact */}
             <Card className="glass-card">
               <CardHeader className="pb-3">
@@ -276,7 +306,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                 <Separator />
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  {/* <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">Urgency</span>
                     <div className="flex items-center gap-2">
                       <span className={`text-xs font-bold ${
@@ -290,8 +320,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                         <span className="text-xs text-red-500">🔥</span>
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between">
+                  </div> */}
+                  {/* <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">Quality</span>
                     <span className={`text-xs font-bold ${
                       (lead.inquiry_notes?.length || 0) > 100 ? 'text-green-500' : 
@@ -299,7 +329,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                     }`}>
                       {lead.inquiry_notes ? (lead.inquiry_notes.length > 100 ? 'High' : lead.inquiry_notes.length > 50 ? 'Medium' : 'Low') : 'Unknown'}
                     </span>
-                  </div>
+                  </div> */}
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">Attempts</span>
                     <span className={`text-xs font-bold ${
@@ -309,7 +339,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                       {lead.nurture_attempts}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
+                  {/* <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">Waiting</span>
                     <span className={`text-xs font-bold ${
                       waitingTime.includes('d') ? 'text-red-500' : 
@@ -317,7 +347,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                     }`}>
                       {waitingTime}
                     </span>
-                  </div>
+                  </div> */}
                 </div>
               </CardContent>
             </Card>
@@ -353,7 +383,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
             )}
 
             {/* AI Drafted Reply - Compact */}
-            {lead.ai_drafted_reply && (
+            {/* {lead.ai_drafted_reply && (
               <Card className="glass-card">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -368,7 +398,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                   </Button>
                 </CardContent>
               </Card>
-            )}
+            )} */}
 
             {/* Actions - Compact */}
             <Card className="glass-card">
@@ -380,13 +410,18 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                   <UserCheck className="h-3 w-3" />
                   Claim Lead
                 </Button>
-                <Button variant="outline" size="sm" className="w-full gap-2 bg-transparent h-8">
-                  <ArrowUp className="h-3 w-3" />
-                  Escalate
-                </Button>
-                <Button variant="outline" size="sm" className="w-full gap-2 bg-transparent h-8">
-                  <Edit3 className="h-3 w-3" />
-                  Edit Info
+                <Button 
+                  size="sm" 
+                  className="w-full gap-2 h-8" 
+                  onClick={handleCall}
+                  disabled={isCalling}
+                >
+                  {isCalling ? (
+                    <LoadingSpinner size="sm" className="text-white" />
+                  ) : (
+                    <PhoneCall className="h-3 w-3" />
+                  )}
+                  {isCalling ? "Calling..." : "Call Lead"}
                 </Button>
               </CardContent>
             </Card>
@@ -440,39 +475,63 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                           </div>
                         )}
                       </div>
-                      {communications.map((message) => (
-                        <div key={message.id} className={`flex gap-2 ${message.direction === 'incoming' ? "flex-row-reverse" : ""}`}>
-                          <Avatar className="h-7 w-7 flex-shrink-0">
-                            <AvatarFallback
-                              className={message.direction === 'incoming' ? "bg-accent/10 text-accent" : "bg-primary/10 text-primary"}
-                            >
-                              {message.direction === 'incoming' ? <User className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className={`flex-1 max-w-[85%] ${message.direction === 'incoming' ? "text-right" : ""}`}>
-                            <div
-                              className={`p-3 rounded-lg ${
-                                message.direction === 'incoming'
-                                  ? "bg-primary/10 border border-primary/20"
-                                  : "bg-muted/30 border border-border"
-                              }`}
-                            >
-                              <p className="text-sm leading-relaxed">{message.content}</p>
-                            </div>
-                            <div className={`flex items-center gap-2 mt-1 ${message.direction === 'incoming' ? "justify-end" : ""}`}>
-                              <p className="text-xs text-muted-foreground">{formatTimeAgo(message.sent_at)}</p>
-                              <Badge variant="outline" className="text-xs px-1 py-0 h-4">
-                                {message.type}
-                              </Badge>
-                              {message.direction === 'outgoing_auto' && (
-                                <Badge variant="secondary" className="text-xs px-1 py-0 h-4">
-                                  AI
+                      {communications.map((message, index) => {
+                        const currentDate = new Date(message.sent_at).toDateString();
+                        const previousDate = index > 0 ? new Date(communications[index - 1].sent_at).toDateString() : null;
+                        const showDateSeparator = currentDate !== previousDate;
+                        
+                        return (
+                          <div key={message.id}>
+                            {/* Date Separator */}
+                            {showDateSeparator && (
+                              <div className="flex items-center gap-3 my-4">
+                                <div className="flex-1 h-px bg-border/50"></div>
+                                <Badge variant="outline" className="text-xs px-3 py-1 bg-muted/50">
+                                  {new Date(message.sent_at).toLocaleDateString('en-US', { 
+                                    weekday: 'short', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                  })}
                                 </Badge>
-                              )}
+                                <div className="flex-1 h-px bg-border/50"></div>
+                              </div>
+                            )}
+                            
+                            {/* Message */}
+                            <div className={`flex gap-3 ${message.direction === 'incoming' ? "flex-row-reverse" : ""}`}>
+                              <Avatar className="h-8 w-8 flex-shrink-0">
+                                <AvatarFallback
+                                  className={message.direction === 'incoming' ? "bg-accent/10 text-accent" : "bg-primary/10 text-primary"}
+                                >
+                                  {message.direction === 'incoming' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className={`flex-1 ${message.direction === 'incoming' ? "text-right" : ""}`} style={{ maxWidth: '75%' }}>
+                                <div
+                                  className={`p-4 rounded-2xl shadow-sm ${
+                                    message.direction === 'incoming'
+                                      ? "bg-primary/10 border border-primary/20 ml-auto"
+                                      : "bg-muted/30 border border-border"
+                                  }`}
+                                >
+                                  <p className="text-sm leading-relaxed">{message.content}</p>
+                                </div>
+                                <div className={`flex items-center gap-2 mt-2 ${message.direction === 'incoming' ? "justify-end" : ""}`}>
+                                  <p className="text-xs text-muted-foreground">{formatTimeAgo(message.sent_at)}</p>
+                                  <Badge variant="outline" className="text-xs px-2 py-0.5 h-5">
+                                    {message.type}
+                                  </Badge>
+                                  {message.direction === 'outgoing_auto' && (
+                                    <Badge variant="secondary" className="text-xs px-2 py-0.5 h-5">
+                                      AI
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </>
                   )}
                 </div>
