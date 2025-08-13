@@ -2,6 +2,7 @@ import os
 import requests
 from .models import Lead
 from .agents.prompt import REFINED_DENTAL_PROMPT
+from datetime import date
 
 VAPI_API_URL = "https://api.vapi.ai/call/phone"
 HEADERS = {
@@ -39,7 +40,7 @@ def make_tool_based_vapi_call(lead: Lead):
             "type": "function",
             "function": {
                 "name": "get_available_slots",
-                "description": "Gets available appointment slots for a given day.",
+                "description": "Gets available appointment slots for a given day. Use date format as YYYY-mm-DD",
                 "parameters": {"type": "object", "properties": {"day": {"type": "string"}}}
             },
             "server": {"url": tool_handler_url}
@@ -63,6 +64,7 @@ def make_tool_based_vapi_call(lead: Lead):
     system_prompt = REFINED_DENTAL_PROMPT.replace("{LEAD_NAME}", lead_name)
     system_prompt = system_prompt.replace("{LEAD_INQUIRY_NOTES}", inquiry_notes)
     system_prompt = system_prompt.replace("{DATE}",str(lead.created_at))
+    system_prompt = system_prompt.replace("{TODAY_DATE}",date.today().strftime("%d-%m-%Y"))
     # Construct the final payload according to the new structure
     payload = {
         "phoneNumberId": os.getenv("VAPI_PHONE_NUMBER_ID"),

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from uuid import UUID
-from .models import LeadStatusEnum,CommTypeEnum,CommDirectionEnum
+from .models import LeadStatusEnum,CommTypeEnum,CommDirectionEnum,SlotStatusEnum
 
 # Base schema for a lead's properties
 class LeadBase(BaseModel):
@@ -50,3 +50,34 @@ class Communication(BaseModel):
 
     class Config:
         orm_mode = True # This allows Pydantic to read data directly from the SQLAlchemy model
+
+
+# Base schema for an appointment slot's properties
+class AppointmentSlotBase(BaseModel):
+    start_time: datetime
+    end_time: datetime
+
+# Schema for viewing an appointment slot
+class AppointmentSlot(AppointmentSlotBase):
+    id: UUID
+    status: SlotStatusEnum
+    lead_id: UUID | None = None
+    reason_for_visit: str | None = None
+    booked_by_method: str | None = None
+
+    class Config:
+        orm_mode = True
+
+# Schema for the bulk creation request body
+class CreateBulkSlotsRequest(BaseModel):
+    start_date: str # e.g., "2025-09-01"
+    end_date: str   # e.g., "2025-09-05"
+    start_time_of_day: str # e.g., "09:00"
+    end_time_of_day: str   # e.g., "17:00"
+    slot_duration_minutes: int
+
+# Schema for the booking request body
+class BookSlotRequest(BaseModel):
+    lead_id: UUID
+    reason_for_visit: str
+    booked_by_method: str

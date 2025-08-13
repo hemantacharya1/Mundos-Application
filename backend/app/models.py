@@ -60,3 +60,25 @@ class Communication(Base):
     direction = Column(Enum(CommDirectionEnum), nullable=False)
     content = Column(Text, nullable=False)
     sent_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# Replicating the ENUM type for slot status
+class SlotStatusEnum(str, enum.Enum):
+    available = "available"
+    booked = "booked"
+    cancelled = "cancelled"
+
+# SQLAlchemy model for the 'appointment_slots' table
+class AppointmentSlot(Base):
+    __tablename__ = "appointment_slots"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    start_time = Column(DateTime(timezone=True), nullable=False, unique=True)
+    end_time = Column(DateTime(timezone=True), nullable=False)
+    status = Column(Enum(SlotStatusEnum), nullable=False, default=SlotStatusEnum.available)
+    
+    lead_id = Column(PG_UUID(as_uuid=True), nullable=True)
+    reason_for_visit = Column(Text, nullable=True)
+    booked_by_method = Column(String(50), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
