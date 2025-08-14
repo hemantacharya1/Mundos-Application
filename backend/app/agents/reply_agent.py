@@ -45,7 +45,7 @@ class ReplyGraphState(TypedDict):
 #     system_instruction="You are an autonomous AI assistant for a dental clinic. Your job is to handle email conversations with patients, use tools to answer questions, book appointments, and escalate to a human only when necessary."
 # )
 client = openai.OpenAI()
-OPENAI_MODEL = "gpt-4o" 
+OPENAI_MODEL = "gpt-4o-mini" 
 
 # --- Agent Nodes ---
 
@@ -72,7 +72,8 @@ def decision_node(state: ReplyGraphState):
 
     **Conversation History (most recent message last):**
     {state['conversation_history']}
-    
+
+    **Previous Output Context
     {previous_output_context}
 
     **Available Tools:**
@@ -86,16 +87,22 @@ def decision_node(state: ReplyGraphState):
         - Generate a `kb_search_query` based on the user's question.
         - Example: {{"next_action": "use_tool", "thought": "The user is asking about crowns, I need to look that up.", "tool_to_use": "search_knowledge_base", "kb_search_query": "cost of dental crowns"}}
 
-    2.  **If the user wants to schedule or check availability**, your `next_action` MUST be `"use_tool"`.
-        - Set `tool_to_use` to the appropriate tool (`get_available_slots` or `book_appointment`).
+    2.  **If the user wants to schedule and have mention a available slot**, your `next_action` MUST be `"use_tool"`.
+        - Set `tool_to_use` to the appropriate tool (`book_appointment`).
         - Provide the necessary `tool_parameters`.
         - Example: {{"next_action": "use_tool", "thought": "The user wants to book for Tuesday afternoon.", "tool_to_use": "book_appointment", "tool_parameters": {{"date": "Tuesday", "time": "2:00 PM", "reason": "checkup"}}}}
 
-    3.  **If you have all the information you need to reply**, your `next_action` MUST be `"reply_to_user"`.
+    3.  **If the user wants to check availability or have asked to book appointement without mentioning a slot then offer available slots and reply to get back time from user**, your `next_action` MUST be `"use_tool"`.
+        - Set `tool_to_use` to the appropriate tool (`get_available_slots`).
+        - Provide the necessary `tool_parameters`.
+        - Example: {{"next_action": "use_tool", "thought": "The user wants to know available slots", "tool_to_use": "get_available_slots", "tool_parameters": {{"day": "Tuesday","}}}}
+
+
+    4.  **If you have all the information you need to reply and have previous_output_context**, your `next_action` MUST be `"reply_to_user"`.
         - Generate a `personalized_html_content` snippet for the email body. Use simple HTML tags like `<p>` and `<strong>`.
         - Example: {{"next_action": "reply_to_user", "thought": "I have the KB info about crowns, now I can answer the user.", "personalized_html_content": "<p>Thanks for asking! A dental crown typically costs between X and Y. Would you like to book a consultation?</p>"}}
 
-    4.  **If the request is a complaint, very complex, or emotionally charged**, your `next_action` MUST be `"escalate_to_human"`.
+    5.  **If the request is a complaint, very complex, or emotionally charged**, your `next_action` MUST be `"escalate_to_human"`.
         - Example: {{"next_action": "escalate_to_human", "thought": "The user seems upset about their last visit. A human should handle this."}}
     """
     
@@ -182,7 +189,7 @@ def send_reply_node(state: ReplyGraphState):
     }
     # NOTE: We are using a new template name here for clarity.
     # You should use the same template file as your other agent.
-    html_body = load_and_populate_template('main_email_template.html', context)
+    html_body = load_and_populate_template('nurture_email.html', context)
     
     reply_domain = os.getenv("REPLY_DOMAIN")
     tracking_reply_to = f"replies+{state['lead_id']}@{reply_domain}"
