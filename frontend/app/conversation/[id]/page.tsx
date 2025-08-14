@@ -23,6 +23,8 @@ import {
   RefreshCw,
   AlertCircle,
   PhoneCall,
+  MailCheck,
+  Mailbox,
 } from "lucide-react"
 import { useConversation } from "@/hooks/use-conversation"
 import { 
@@ -407,8 +409,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
               </CardHeader>
               <CardContent className="space-y-2 pt-0">
                 <Button size="sm" className="w-full gap-2 h-8">
-                  <UserCheck className="h-3 w-3" />
-                  Claim Lead
+                  <Mail className="h-3 w-3" />
+                  Send SMS
                 </Button>
                 <Button 
                   size="sm" 
@@ -422,6 +424,10 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                     <PhoneCall className="h-3 w-3" />
                   )}
                   {isCalling ? "Calling..." : "Call Lead"}
+                </Button>
+                <Button size="sm" className="w-full gap-2 h-8">
+                  <Mailbox className="h-3 w-3" />
+                  Send WhatsApp
                 </Button>
               </CardContent>
             </Card>
