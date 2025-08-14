@@ -102,10 +102,10 @@ export function KnowledgeBaseSearch({
       </div>
 
       {showResults && results.length > 0 && (
-        <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-96 overflow-y-auto">
-          <CardHeader className="pb-2">
+        <Card className="absolute top-full left-0 right-0 mt-2 z-50">
+          <CardHeader className="py-2">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-sm">Search Results</CardTitle>
+              <CardTitle className="text-xs">Search Results</CardTitle>
               <Button
                 variant="ghost"
                 size="sm"
@@ -115,27 +115,27 @@ export function KnowledgeBaseSearch({
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {results.map((result, index) => (
-              <div
-                key={index}
-                className="p-3 border rounded-lg cursor-pointer hover:bg-muted transition-colors"
-                onClick={() => handleResultClick(result)}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {result.title}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {(result.score * 100).toFixed(1)}%
-                  </Badge>
+          <CardContent className="pt-0">
+            <div className="max-h-72 overflow-y-auto pr-2 space-y-2">
+              {results.map((result, index) => (
+                <div
+                  key={index}
+                  className="p-2 border rounded-md cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleResultClick(result)}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+                      {result.title}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                      {(result.score * 100).toFixed(1)}%
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Chunk {result.chunk_index + 1}</p>
+                  <p className="text-sm line-clamp-2 mt-1">{result.content}</p>
                 </div>
-                <p className="text-sm text-muted-foreground mb-1">
-                  Chunk {result.chunk_index + 1}
-                </p>
-                <p className="text-sm line-clamp-3">{result.content}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
