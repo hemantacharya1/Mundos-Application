@@ -2,13 +2,17 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import os
 import json
+import openai
 from .. import crud, models, schemas, voice_utils
 from ..database import SessionLocal
 from ..utils import send_email, send_sms
 from ..models import LeadStatusEnum, CommTypeEnum, CommDirectionEnum
 
 # We can reuse the same Gemini model configuration
-from ..agents.triage_agent import model, load_and_populate_template
+from ..agents.triage_agent import load_and_populate_template
+
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+MODEL_NAME = "gpt-4o-mini"
 
 # --- NEW: Centralized Content Generation Function ---
 
@@ -36,16 +40,23 @@ def generate_follow_up_content(lead: models.Lead, attempt_number: int, kb_info: 
     Return ONLY a JSON object with two keys: "subject" (for emails) and "body" (for the message content).
     """
     
-    response = model.generate_content(prompt)
-    
     try:
-        content_data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": "You are a helpful marketing assistant for a dental clinic. You will be given details and must return a JSON object with 'subject' and 'body' keys."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"} # Use JSON mode for reliability
+        )
+        content_data = json.loads(response.choices[0].message.content)
         subject = content_data.get('subject', 'A quick follow-up from Bright Smile Clinic')
         body_plain = content_data.get('body', 'Just checking in!')
+
     except Exception as e:
-        print(f"Error generating follow-up content: {e}. Using fallback.")
+        print(f"Error generating follow-up content with OpenAI: {e}. Using fallback.")
         subject = "A quick follow-up from Bright Smile Clinic"
-        body_plain = f"Hi {lead.first_name}, just checking in on your recent inquiry."
+        body_plain = f"Hi {lead.first_name}, just checking in on your recent inquiry about {lead.inquiry_notes}."
 
     # Populate the HTML template for the final email
     body_html = None
