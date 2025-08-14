@@ -52,8 +52,8 @@ class KnowledgeBaseService:
 
         # --- Initialize Text Splitter ---
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=100,
+            chunk_size=1200,
+            chunk_overlap=200,
             length_function=len,
             separators=["\n\n", "\n", " ", ""],
         )

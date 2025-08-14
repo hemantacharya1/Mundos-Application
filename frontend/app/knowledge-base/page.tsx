@@ -49,7 +49,7 @@ export default function KnowledgeBasePage() {
     try {
       const data = await apiService.searchKnowledgeBase({
         query: searchQuery,
-        top_k: 10,
+        top_k: 3,
       });
       setSearchResults(data.results);
     } catch (error) {
@@ -198,26 +198,29 @@ export default function KnowledgeBasePage() {
             </div>
 
             {searchResults.length > 0 && (
-              <div className="mt-6 space-y-4">
-                <h3 className="text-lg font-semibold">
+              <div className="mt-6">
+                <h3 className="text-base font-semibold mb-2">
                   Search Results ({searchResults.length})
                 </h3>
-                {searchResults.map((result, index) => (
-                  <Card key={index}>
-                    <CardContent className="pt-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <Badge variant="secondary">{result.title}</Badge>
-                        <Badge variant="outline">
-                          Score: {(result.score * 100).toFixed(1)}%
+                <div className="max-h-72 overflow-y-auto pr-2 space-y-2">
+                  {searchResults.map((result, index) => (
+                    <div
+                      key={index}
+                      className="p-2 border rounded-md cursor-default hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">
+                          {result.title}
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                          {(result.score * 100).toFixed(1)}%
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Chunk {result.chunk_index + 1}
-                      </p>
-                      <p className="text-sm">{result.content}</p>
-                    </CardContent>
-                  </Card>
-                ))}
+                      <p className="text-xs text-muted-foreground">Chunk {result.chunk_index + 1}</p>
+                      <p className="text-sm line-clamp-2 mt-1">{result.content}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
