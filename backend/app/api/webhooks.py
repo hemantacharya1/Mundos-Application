@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from .. import crud, models,clinic_tools,schemas
 from ..database import get_db
 from ..agents.reply_agent import run_reply_analyzer
+from ..models import CommTypeEnum,CommDirectionEnum
 
 router = APIRouter(
     prefix="/webhooks",
@@ -44,19 +45,24 @@ async def handle_email_reply(
     if not lead:
         raise HTTPException(status_code=404, detail=f"Lead with ID {lead_id_str} not found.")
 
+    crud.create_communication_log(db, schemas.CommunicationCreate(
+            lead_id=lead.id,
+            type=CommTypeEnum.email,
+            direction=CommDirectionEnum.incoming,
+            content=email_body
+        ))
+
     # Only process if the lead is currently being nurtured
     if lead.status == models.LeadStatusEnum.nurturing:
         crud.update_lead_status(db, lead_id=lead.id, status=models.LeadStatusEnum.responded)
         print(f"Lead {lead.lead_id} status updated to 'responded'. Nurture sequence halted.")
 
         # --- CRITICAL STEP 2: Trigger the AI analyzer in the background ---
-        background_tasks.add_task(run_reply_analyzer, lead_id=str(lead.id), reply_text=email_body)
-        print(f"Scheduled Reply Intent Analyzer for lead: {lead.lead_id}")
-        
-        return {"status": "success", "message": "Reply being processed."}
-    else:
-        print(f"Lead {lead.lead_id} already has status '{lead.status}'. Ignoring duplicate reply.")
-        return {"status": "ignored", "message": "Duplicate or non-nurturing reply."}
+    background_tasks.add_task(run_reply_analyzer, lead_id=str(lead.id))
+    print(f"Scheduled Reply Intent Analyzer for lead: {lead.lead_id}")   
+    
+    print("status: success", "message: Reply being processed by autonomous agent.")
+    return {"status": "success", "message": "Reply being processed by autonomous agent."}
     
 
 @router.post("/vapi-tool-handler")

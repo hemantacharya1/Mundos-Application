@@ -6,7 +6,7 @@ from twilio.rest import Client
 
 from .knowledge_base import knowledge_base_service
 
-def send_email(to_email: str, subject: str, body: str, reply_to_address: str | None = None):
+def send_email(to_email: str, subject: str, body: str, reply_to_address: str | None = None,html_body: str | None = None):
     """Sends an email using SMTP credentials, with an optional custom Reply-To address."""
     try:
         msg = MIMEMultipart()
@@ -18,7 +18,13 @@ def send_email(to_email: str, subject: str, body: str, reply_to_address: str | N
         if reply_to_address:
             msg.add_header('Reply-To', reply_to_address)
 
-        msg.attach(MIMEText(body, 'plain'))
+        # msg.attach(MIMEText(body, 'plain'))
+
+        # *** THIS IS THE NEW PART ***
+        # If HTML content is provided, attach it as well.
+        # Email clients will prefer to render the HTML version.
+        # if html_body:
+        msg.attach(MIMEText(html_body, 'html'))
 
         server = smtplib.SMTP(os.getenv("SMTP_HOST"), int(os.getenv("SMTP_PORT")))
         server.starttls()
@@ -58,6 +64,34 @@ def send_sms(to_number: str, body: str) -> bool:
         return True
     except Exception as e:
         print(f"Failed to send SMS to {to_number}. Error: {e}")
+        return False
+    
+def send_whatsapp(to_number: str, body: str) -> bool:
+    """
+    Sends an SMS message using the Twilio client.
+    """
+    try:
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        from_number = os.getenv("TWILIO_PHONE_NUMBER")
+        from_number = f"whatsapp:+14155238886"
+        to_number = f"whatsapp:{to_number}"
+       
+        if not account_sid or not auth_token or not from_number:
+            print("Error: Twilio environment variables are not set.")
+            return False
+
+        client = Client(account_sid, auth_token)
+        
+        message = client.messages.create(
+            body=body,
+            from_=from_number,
+            to=to_number
+        )
+        print(f"whatsapp message sent successfully to {to_number}. SID: {message.sid}")
+        return True
+    except Exception as e:
+        print(f"Failed to send whatsapp message to {to_number}. Error: {e}")
         return False
 
 
