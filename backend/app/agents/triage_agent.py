@@ -2,144 +2,180 @@ import os
 from typing import TypedDict, Literal
 import google.generativeai as genai
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import json
 
 from .. import crud, schemas
 from ..database import SessionLocal
-from ..utils import send_email,send_whatsapp
+from ..utils import send_email, send_whatsapp
 from ..models import LeadStatusEnum, CommTypeEnum, CommDirectionEnum
 
 # --- Pydantic model for structured output from the LLM ---
 class TriageResult(BaseModel):
-    is_emergency: bool
-    reason: str
+    category: Literal['Emergency', 'Insurance_Query', 'Scheduling_Query', 'Service_Inquiry', 'General_Follow_Up'] = Field(description="The primary category of the user's inquiry.")
+    summary: str = Field(description="A concise one-sentence summary of the user's specific inquiry.")
+    is_emergency: bool = Field(description="A boolean flag indicating if the inquiry is a dental emergency.")
 
-# --- LangGraph State Definition ---
+# --- Updated LangGraph State Definition ---
 class GraphState(TypedDict):
     lead_id: str
     first_name: str
     email: str
     inquiry_notes: str
+    category: str | None = None
+    summary: str | None = None
     is_emergency: bool | None = None
+    kb_info: str | None = None
     email_subject: str | None = None
-    email_body: str | None = None
+    email_body_plain: str | None = None
+    email_body_html: str | None = None
 
 # --- Configure Gemini API ---
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel(
     model_name='gemini-1.5-flash',
-    system_instruction="You are an expert dental clinic receptionist AI. Your job is to analyze patient inquiries and perform tasks based on their content."
+    system_instruction="You are an expert dental clinic receptionist AI. Your job is to analyze patient inquiries and provide concise information for communication."
 )
 
+# --- Helper function to load and populate templates ---
+def load_and_populate_template(template_name: str, context: dict) -> str:
+    """Loads an HTML template from a file and injects context data."""
+    template_path = os.path.join(os.path.dirname(__file__), '..', 'template', template_name)
+    with open(template_path, 'r') as f:
+        template_str = f.read()
+    for key, value in context.items():
+        template_str = template_str.replace(f"{{{key}}}", str(value))
+    return template_str
+
 # --- Agent Nodes ---
-
 def triage_node(state: GraphState):
-    """Analyzes inquiry notes to determine if it's an emergency."""
-    print(f"--- TRIAGE NODE for Lead ID: {state['lead_id']} ---")
+    """Analyzes inquiry notes to categorize it and extract key details."""
+    print(f"--- REFINED TRIAGE NODE for Lead ID: {state['lead_id']} ---")
     prompt = f"""
-    Analyze the following patient inquiry and determine if it suggests a dental emergency or a complex query requiring immediate human attention.
-    Emergency keywords include: pain, broken tooth, swelling, accident, bleeding, emergency, urgent.
-    Complex queries include specific insurance questions.
-
+    Analyze the following patient inquiry for a dental clinic. Your task is to perform a detailed classification.
     Inquiry: "{state['inquiry_notes']}"
 
-    Respond ONLY with a JSON object with two keys: "is_emergency" (boolean) and "reason" (a brief explanation).
-    Example: {{"is_emergency": true, "reason": "The user mentioned 'severe pain'."}}
+    Based on the inquiry, provide a JSON object with the following three keys:
+    1.  "category": Classify into ONE of ['Emergency', 'Insurance_Query', 'Scheduling_Query', 'Service_Inquiry', 'General_Follow_Up'].
+    2.  "summary": Provide a short, concise noun phrase describing the exact service, issue, or topic mentioned by the patient (no full sentences, no extra words like "the patient is asking about"). Keep it under 6 words.
+    3.  "is_emergency": A boolean value (true/false).
     """
     response = model.generate_content(prompt)
-    
     try:
-        # Clean the response and parse it
         cleaned_response = response.text.strip().replace('```json', '').replace('```', '')
         result_json = json.loads(cleaned_response)
         triage_data = TriageResult(**result_json)
-        state['is_emergency'] = triage_data.is_emergency
-    except (json.JSONDecodeError, TypeError) as e:
-        print(f"Error parsing LLM response: {e}. Defaulting to non-emergency.")
-        state['is_emergency'] = False
+        state.update({
+            'category': triage_data.category,
+            'summary': triage_data.summary,
+            'is_emergency': triage_data.is_emergency
+        })
+    except Exception as e:
+        print(f"Error parsing LLM response: {e}. Defaulting to General_Follow_Up.")
+        state.update({
+            'is_emergency': False,
+            'category': 'General_Follow_Up',
+            'summary': state['inquiry_notes']
+        })
+    return state
+
+def kb_lookup_node(state: GraphState):
+    """*** FUTURE IMPLEMENTATION HOOK ***"""
+    print(f"--- KB LOOKUP NODE (SKIPPED) for Lead ID: {state['lead_id']} ---")
+    # In the future, your KB search logic will go here.
+    # It will populate state['kb_info'].
+    return state
+
+def generate_email_content_node(state: GraphState):
+    """Selects a template and assembles the final HTML email."""
+    print(f"--- TEMPLATE-BASED EMAIL GENERATION for Lead ID: {state['lead_id']} ---")
+    context = {"first_name": state['first_name'], "summary": state['summary']}
+
+    if state['is_emergency']:
+        state['email_subject'] = f"Urgent Inquiry Received - {state['summary']}"
+        state['email_body_html'] = load_and_populate_template('emergency_email.html', context)
+        state['email_body_plain'] = f"Hi {state['first_name']}, Thank you for your inquiry regarding an urgent matter: '{state['summary']}'. A team member will call you shortly."
+    else:
+        state['email_subject'] = f"Following Up on Your Inquiry about {state['summary']}"
+        kb_info = state.get('kb_info')
+        kb_section_html = ""
+        if kb_info:
+            # This is where you could use an LLM for a small task if needed, or just format the text.
+            kb_section_html = f'<div class="kb-section"><p>{kb_info}</p></div>'
         
-    return state
-
-def human_handoff_node(state: GraphState):
-    """Generates email content for an emergency lead."""
-    print(f"--- HUMAN HANDOFF NODE for Lead ID: {state['lead_id']} ---")
-    state['email_subject'] = "Urgent Inquiry Received - Bright Smile Clinic"
-    state['email_body'] = f"Hi {state['first_name']},\n\nThank you for your inquiry. We've flagged it for immediate review due to its urgent nature.\n\nA member of our team will contact you shortly.\n\nSincerely,\nThe Bright Smile Clinic Team"
-    return state
-
-def nurture_node(state: GraphState):
-    """Generates the first follow-up email for a standard lead."""
-    print(f"--- NURTURE NODE for Lead ID: {state['lead_id']} ---")
-    state['email_subject'] = "Following Up on Your Inquiry - Bright Smile Clinic"
-    state['email_body'] = f"Hi {state['first_name']},\n\nThis is a friendly follow-up from the team at Bright Smile Clinic regarding your recent inquiry.\n\nWe wanted to see if you had any questions or if you were ready to book a visit. We're here to help!\n\nSincerely,\nThe Bright Smile Clinic Team"
+        context['kb_section'] = kb_section_html
+        state['email_body_html'] = load_and_populate_template('nurture_email.html', context)
+        state['email_body_plain'] = f"Hi {state['first_name']}, Following up on your inquiry about '{state['summary']}'. {kb_info or 'We are looking into your question and will get back to you.'}"
     return state
 
 def action_node(state: GraphState):
-    """Performs the final actions: updates DB and sends email."""
+    """Performs the final actions: updates DB and sends communications."""
     print(f"--- ACTION NODE for Lead ID: {state['lead_id']} ---")
     db = SessionLocal()
     try:
-        is_nurture_start = not state['is_emergency']
         status_to_set = LeadStatusEnum.needs_immediate_attention if state['is_emergency'] else LeadStatusEnum.nurturing
         
-        # 1. Update lead status in DB
         db_lead = crud.get_lead_by_id(db, state['lead_id'])
         if db_lead:
             db_lead.status = status_to_set
-            # *** THIS IS THE NEW PART ***
-            if is_nurture_start:
-                db_lead.nurture_attempts = 1 # Set the first attempt!
+            if not state['is_emergency']:
+                db_lead.nurture_attempts = 1
             db.commit()
         
-        # *** THIS IS THE NEW PART ***
-        # Construct the dynamic Reply-To address
         reply_domain = os.getenv("REPLY_DOMAIN")
         tracking_reply_to = f"replies+{state['lead_id']}@{reply_domain}"
 
-        # 2. Send the email
+        # 1. Send the dynamic email
         send_email(
             to_email=state['email'],
             subject=state['email_subject'],
-            body=state['email_body'],
-            reply_to_address=tracking_reply_to # Pass it here
+            body=state['email_body_plain'],
+            html_body=state['email_body_html'],
+            reply_to_address=tracking_reply_to
         )
-        body = f"Hi {db_lead.first_name}, it's the team from Bright Smile Clinic. Just checking in to see if you had any questions. You can reply to this message or call us."
-        if send_whatsapp(db_lead.phone_number,body=body):
-            print("Whatsapp message done ")
         
-        # 3. Log the communication
-        comm_log = schemas.CommunicationCreate(
+        # 2. Send a consistent WhatsApp message
+        if db_lead and db_lead.phone_number:
+            # Use the plain text body for WhatsApp for consistency
+            if send_whatsapp(db_lead.phone_number, body=state['email_body_plain']):
+                print("WhatsApp message sent successfully.")
+        
+        # 3. Log the primary communication (email)
+        crud.create_communication_log(db, schemas.CommunicationCreate(
             lead_id=state['lead_id'],
             type=CommTypeEnum.email,
             direction=CommDirectionEnum.outgoing_auto,
-            content=f"Subject: {state['email_subject']}\n\n{state['email_body']}"
-        )
-        crud.create_communication_log(db, comm=comm_log)
-        
+            # CORRECTED: Use email_body_plain, which is guaranteed to exist.
+            content=f"Subject: {state['email_subject']}\n\n{state['email_body_plain']}"
+        ))
     finally:
         db.close()
     return state
 
-# --- Conditional Router ---
-def router(state: GraphState) -> Literal["human_handoff_node", "nurture_node"]:
-    """Routes to the appropriate node based on the triage result."""
-    if state['is_emergency']:
-        return "human_handoff_node"
-    else:
-        return "nurture_node"
+# --- This is the single, correct router for this graph ---
+def router(state: GraphState) -> Literal["kb_lookup_node", "generate_email_content_node"]:
+    """Decides if a KB lookup is needed before generating the email."""
+    print(f"--- ROUTER for category: {state['category']} ---")
+    # For now, we bypass the KB for all categories.
+    # In the future, you can add logic here:
+    # if state['category'] == 'Service_Inquiry':
+    #     return "kb_lookup_node"
+    return "generate_email_content_node"
 
-# --- Build the Graph ---
+# --- Build the Final Graph ---
 workflow = StateGraph(GraphState)
 workflow.add_node("triage_node", triage_node)
-workflow.add_node("human_handoff_node", human_handoff_node)
-workflow.add_node("nurture_node", nurture_node)
+workflow.add_node("kb_lookup_node", kb_lookup_node)
+workflow.add_node("generate_email_content_node", generate_email_content_node)
 workflow.add_node("action_node", action_node)
 
 workflow.set_entry_point("triage_node")
+# The triage node now goes to our new router
 workflow.add_conditional_edges("triage_node", router)
-workflow.add_edge("human_handoff_node", "action_node")
-workflow.add_edge("nurture_node", "action_node")
+# The KB node (even though it does nothing yet) connects to the email generator
+workflow.add_edge("kb_lookup_node", "generate_email_content_node")
+# The email generator connects to the final action node
+workflow.add_edge("generate_email_content_node", "action_node")
 workflow.add_edge("action_node", END)
 
 app_graph = workflow.compile()
@@ -152,7 +188,6 @@ def run_triage_agent(lead_id: str):
         if not lead:
             print(f"Could not find lead with ID: {lead_id}")
             return
-
         initial_state = GraphState(
             lead_id=str(lead.id),
             first_name=lead.first_name,

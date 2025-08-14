@@ -4,7 +4,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from twilio.rest import Client
 
-def send_email(to_email: str, subject: str, body: str, reply_to_address: str | None = None):
+def send_email(to_email: str, subject: str, body: str, reply_to_address: str | None = None,html_body: str | None = None):
     """Sends an email using SMTP credentials, with an optional custom Reply-To address."""
     try:
         msg = MIMEMultipart()
@@ -16,7 +16,13 @@ def send_email(to_email: str, subject: str, body: str, reply_to_address: str | N
         if reply_to_address:
             msg.add_header('Reply-To', reply_to_address)
 
-        msg.attach(MIMEText(body, 'plain'))
+        # msg.attach(MIMEText(body, 'plain'))
+
+        # *** THIS IS THE NEW PART ***
+        # If HTML content is provided, attach it as well.
+        # Email clients will prefer to render the HTML version.
+        # if html_body:
+        msg.attach(MIMEText(html_body, 'html'))
 
         server = smtplib.SMTP(os.getenv("SMTP_HOST"), int(os.getenv("SMTP_PORT")))
         server.starttls()

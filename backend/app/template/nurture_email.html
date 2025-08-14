@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+.container { padding: 20px; border: 1px solid #ddd; border-radius: 8px; max-width: 600px; margin: 20px auto; }
+.header { color: #1a73e8; font-size: 24px; font-weight: bold; }
+.signature { margin-top: 20px; }
+.kb-section { background-color: #f4f8ff; border-left: 4px solid #1a73e8; padding: 15px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="container">
+<p class="header">Following Up on Your Inquiry</p>
+<p>Hi {first_name},</p>
+<p>This is a friendly follow-up from the team at Bright Smile Clinic regarding your recent inquiry. We wanted to make sure we addressed your question properly.</p>
+<p><strong>Regarding your question about:</strong> "{summary}"</p>
+<!-- This is the dynamic section for the KB info -->
+    {kb_section}
+
+    <p>We're here to help if you have any more questions or if you're ready to book a visit. Our team is dedicated to providing you with the best possible care.</p>
+    <div class="signature">
+        <p>Sincerely,<br>The Bright Smile Clinic Team</p>
+    </div>
+</div>
+</body>
+</html>
