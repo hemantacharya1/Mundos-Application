@@ -132,6 +132,35 @@ export interface AdvancedDashboardMetrics {
   conversion_funnel: ConversionFunnel[]; // Funnel Chart
 }
 
+// Appointment Types
+export interface AppointmentSlot {
+  id: string;
+  start_time: string;
+  end_time: string;
+  status: SlotStatus;
+  lead_id?: string;
+  reason_for_visit?: string;
+  booked_by_method?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SlotStatus = 'available' | 'booked' | 'cancelled';
+
+export interface CreateBulkSlotsRequest {
+  start_date: string;
+  end_date: string;
+  start_time_of_day: string;
+  end_time_of_day: string;
+  slot_duration_minutes: number;
+}
+
+export interface BookSlotRequest {
+  lead_id: string;
+  reason_for_visit: string;
+  booked_by_method: string;
+}
+
 // API Service Class
 class ApiService {
   private baseUrl: string;
@@ -215,6 +244,29 @@ class ApiService {
     return this.request<void>(`/api/leads/${leadId}/reply`, {
       method: 'POST',
       body: JSON.stringify({ content }),
+    });
+  }
+
+  // Appointment endpoints
+  async getAppointmentSlots(startDate: string, endDate: string): Promise<AppointmentSlot[]> {
+    const searchParams = new URLSearchParams();
+    searchParams.append('start_date', startDate);
+    searchParams.append('end_date', endDate);
+    
+    return this.request<AppointmentSlot[]>(`/api/appointments?${searchParams.toString()}`);
+  }
+
+  async createBulkSlots(request: CreateBulkSlotsRequest): Promise<{ status: string; message: string }> {
+    return this.request<{ status: string; message: string }>('/api/appointments/create-bulk-slots', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  async bookAppointmentSlot(slotId: string, request: BookSlotRequest): Promise<AppointmentSlot> {
+    return this.request<AppointmentSlot>(`/api/appointments/${slotId}/book`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
     });
   }
 
