@@ -36,8 +36,6 @@ class Lead(Base):
 
 # Note: The 'communications' table model is not needed yet, but will be added here later.
 
-# ... (keep the existing Lead model)
-
 # Replicating the ENUM types for communications
 class CommTypeEnum(str, enum.Enum):
     email = "email"
@@ -80,5 +78,16 @@ class AppointmentSlot(Base):
     reason_for_visit = Column(Text, nullable=True)
     booked_by_method = Column(String(50), nullable=True)
 
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+# Knowledge Base model for storing text content
+class KnowledgeBase(Base):
+    __tablename__ = "knowledge_base"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    chunk_id = Column(String(255), nullable=True)  # Pinecone vector ID
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

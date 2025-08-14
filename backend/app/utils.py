@@ -4,6 +4,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from twilio.rest import Client
 
+from .knowledge_base import knowledge_base_service
+
 def send_email(to_email: str, subject: str, body: str, reply_to_address: str | None = None):
     """Sends an email using SMTP credentials, with an optional custom Reply-To address."""
     try:
@@ -57,3 +59,25 @@ def send_sms(to_number: str, body: str) -> bool:
     except Exception as e:
         print(f"Failed to send SMS to {to_number}. Error: {e}")
         return False
+
+
+def knowledge_base_semantic_search(query: str, top_k: int = 5) -> list:
+    """
+    Perform semantic search on the knowledge base.
+    
+    Args:
+        query (str): The search query
+        top_k (int): Number of top results to return
+        
+    Returns:
+        list: List of search results with content and metadata
+    """
+    try:
+        results = knowledge_base_service.search_knowledge_base(query, top_k)
+        return results
+    except Exception as e:
+        # Log the error but don't fail the application
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in knowledge base semantic search: {e}")
+        return []

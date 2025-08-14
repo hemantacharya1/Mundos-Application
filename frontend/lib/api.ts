@@ -161,6 +161,44 @@ export interface BookSlotRequest {
   booked_by_method: string;
 }
 
+// Knowledge Base Types
+export interface KnowledgeBaseEntry {
+  title: string;
+  chunks: Array<{
+    id: string;
+    content: string;
+    chunk_id: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeBaseCreate {
+  title: string;
+  content: string;
+}
+
+export interface KnowledgeBaseSearch {
+  query: string;
+  top_k: number;
+}
+
+export interface SearchResult {
+  chunk_id: string;
+  score: number;
+  content: string;
+  title: string;
+  chunk_index: number;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  query: string;
+  total_results: number;
+}
+
 // API Service Class
 class ApiService {
   private baseUrl: string;
@@ -291,6 +329,39 @@ class ApiService {
   async testAiCall(leadId: string): Promise<void> {
     return this.request<void>(`/api/leads/${leadId}/test-ai-call`, {
       method: 'POST',
+    });
+  }
+
+  // Knowledge Base endpoints
+  async getKnowledgeBaseEntries(): Promise<KnowledgeBaseEntry[]> {
+    return this.request<KnowledgeBaseEntry[]>('/api/knowledge-base');
+  }
+
+  async createKnowledgeBaseEntry(entry: KnowledgeBaseCreate): Promise<KnowledgeBaseEntry> {
+    return this.request<KnowledgeBaseEntry>('/api/knowledge-base', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    });
+  }
+
+  async updateKnowledgeBaseEntry(title: string, content: string): Promise<KnowledgeBaseEntry> {
+    return this.request<KnowledgeBaseEntry>('/api/knowledge-base', {
+      method: 'POST',
+      body: JSON.stringify({ title, content }),
+    });
+  }
+
+  async searchKnowledgeBase(searchRequest: KnowledgeBaseSearch): Promise<SearchResponse> {
+    return this.request<SearchResponse>('/api/knowledge-base/search', {
+      method: 'POST',
+      body: JSON.stringify(searchRequest),
+    });
+  }
+
+  async deleteKnowledgeBaseEntry(title: string): Promise<{ message: string }> {
+    const encodedTitle = encodeURIComponent(title);
+    return this.request<{ message: string }>(`/api/knowledge-base/${encodedTitle}`, {
+      method: 'DELETE',
     });
   }
 
