@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { LayoutDashboard, Users, UserCheck, Menu, X, Sun, Moon } from "lucide-react"
+import { LayoutDashboard, Users, UserCheck, Menu, X, Sun, Moon, Calendar, BookOpen } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useSidebar } from "@/components/sidebar-provider"
 
@@ -13,6 +13,8 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "All Leads", href: "/leads", icon: Users },
   { name: "Handoff Queue", href: "/handoff", icon: UserCheck },
+  { name: "Appointments", href: "/appointments", icon: Calendar },
+  { name: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
 ]
 
 export function Sidebar() {
