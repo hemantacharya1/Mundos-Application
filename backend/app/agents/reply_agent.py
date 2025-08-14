@@ -17,11 +17,14 @@ from ..agents.triage_agent import load_and_populate_template
 class AgentDecision(BaseModel):
     next_action: Literal['use_tool', 'reply_to_user', 'escalate_to_human'] = Field(description="The next immediate action the agent should take.")
     thought: str = Field(description="A brief thought process explaining the decision.")
+    
+    # --- Fields for 'use_tool' action ---
     tool_to_use: str | None = Field(None, description="The name of the tool to use, if next_action is 'use_tool'.")
     tool_parameters: dict | None = Field(None, description="The parameters for the tool, if next_action is 'use_tool'.")
-    reply_content: str | None = Field(None, description="The content of the email to send, if next_action is 'reply_to_user'.")
-    personalized_html_content: str | None = Field(None, description="A clean HTML snippet to be injected into the main email template.")
+    kb_search_query: str | None = Field(None, description="A search query for the vector database if the tool is 'search_knowledge_base'.")
 
+    # --- Field for 'reply_to_user' action ---
+    personalized_html_content: str | None = Field(None, description="A clean HTML snippet to be injected into the main email template, if next_action is 'reply_to_user'.")
 # --- Updated LangGraph State ---
 class ReplyGraphState(TypedDict):
     lead_id: str
@@ -47,67 +50,82 @@ OPENAI_MODEL = "gpt-4o"
 # --- Agent Nodes ---
 
 def decision_node(state: ReplyGraphState):
-    """The core 'brain' of the agent. It decides the next action using OpenAI."""
+    """The core 'brain' of the agent. It decides the next action using a more robust prompt."""
     print(f"--- DECISION NODE (OpenAI) for Lead ID: {state['lead_id']} ---")
     
     tools_description = """
-    - `get_plan_details(plan_name: str)`: Use this to find pricing and details for services.
+    - `search_knowledge_base(query: str)`: Use this to find information about dental procedures, insurance policies, or general clinic info.
     - `get_available_slots(day: str)`: Use this to find open appointment times.
     - `book_appointment(date: str, time: str, reason: str)`: Use this to finalize a booking.
     """
     
-    # Include previous tool or KB output in the context for the next decision
     previous_output_context = ""
     if state.get('tool_output'):
-        previous_output_context = f"\n**Previous Tool Execution Result:**\n{state['tool_output']}\n"
+        previous_output_context = f"\n**Context from Previous Tool Result:**\n{state['tool_output']}\n"
     elif state.get('kb_info'):
-        previous_output_context = f"\n**Information from Knowledge Base:**\n{state['kb_info']}\n"
+        previous_output_context = f"\n**Context from Knowledge Base Search:**\n{state['kb_info']}\n"
 
-    # Construct messages for the OpenAI Chat Completions API
+    # This new prompt is more direct and provides clear JSON examples for the LLM to follow.
+    prompt = f"""
+    You are an autonomous email agent for a dental clinic. Your goal is to resolve the user's needs efficiently.
+    Today's Date is {date.today().strftime("%Y-%m-%d")}.
+
+    **Conversation History (most recent message last):**
+    {state['conversation_history']}
+    
+    {previous_output_context}
+
+    **Available Tools:**
+    {tools_description}
+
+    **Your Task:**
+    Analyze the full context and decide on the single next step. Respond with a JSON object.
+
+    1.  **If you need more information to answer the user's question**, your `next_action` MUST be `"use_tool"`.
+        - Set `tool_to_use` to `"search_knowledge_base"`.
+        - Generate a `kb_search_query` based on the user's question.
+        - Example: {{"next_action": "use_tool", "thought": "The user is asking about crowns, I need to look that up.", "tool_to_use": "search_knowledge_base", "kb_search_query": "cost of dental crowns"}}
+
+    2.  **If the user wants to schedule or check availability**, your `next_action` MUST be `"use_tool"`.
+        - Set `tool_to_use` to the appropriate tool (`get_available_slots` or `book_appointment`).
+        - Provide the necessary `tool_parameters`.
+        - Example: {{"next_action": "use_tool", "thought": "The user wants to book for Tuesday afternoon.", "tool_to_use": "book_appointment", "tool_parameters": {{"date": "Tuesday", "time": "2:00 PM", "reason": "checkup"}}}}
+
+    3.  **If you have all the information you need to reply**, your `next_action` MUST be `"reply_to_user"`.
+        - Generate a `personalized_html_content` snippet for the email body. Use simple HTML tags like `<p>` and `<strong>`.
+        - Example: {{"next_action": "reply_to_user", "thought": "I have the KB info about crowns, now I can answer the user.", "personalized_html_content": "<p>Thanks for asking! A dental crown typically costs between X and Y. Would you like to book a consultation?</p>"}}
+
+    4.  **If the request is a complaint, very complex, or emotionally charged**, your `next_action` MUST be `"escalate_to_human"`.
+        - Example: {{"next_action": "escalate_to_human", "thought": "The user seems upset about their last visit. A human should handle this."}}
+    """
+    
     messages = [
-        {"role": "system", "content": "You are an autonomous AI assistant for a dental clinic. Your job is to handle email conversations with patients, use tools and a knowledge base to answer questions, book appointments, and escalate to a human only when necessary. Respond ONLY with a valid JSON object matching the required schema."},
-        {"role": "user", "content": f"""
-        Analyze the conversation history and context to decide the next action.
-        Today's Date is {date.today().strftime("%Y-%m-%d")}.
-
-        **Conversation History (most recent message last):**
-        {state['conversation_history']}
-
-        **Available Tools:**
-        {tools_description}
-        
-        {previous_output_context}
-
-        **Your Task:**
-        Based on the full context, decide the single next step:
-        1.  **Search KB:** If the user is asking a factual question (about procedures, insurance, policies) that is not covered by a tool, generate a `kb_search_query` and set `next_action` to `use_tool` with `tool_to_use` as `search_knowledge_base`.
-        2.  **Use a Tool:** If the user's request directly maps to another tool (like booking or checking slots), set `next_action` to `use_tool` and specify the tool.
-        3.  **Reply to User:** If you have enough information to answer (e.g., after a KB search or tool use), set `next_action` to `reply_to_user`. Your task is to generate a `personalized_html_content` snippet.
-    - **Instructions for the HTML snippet:**
-    - **Be Concise:** Keep the reply under 120 words.
-    - **Use Simple HTML Tags:** Use `<p>`, `<ul>`, `<li>`, and `<strong>` for emphasis.
-    - **DO NOT** include `<html>`, `<head>`, or `<body>` tags. The output must be ONLY the content that goes inside the main email body.
-    - **Be Helpful:** Directly address the user's last message from the conversation history using the context you have.
-    - **End with a clear call to action** or a question to encourage a continued conversation.
-        4.  **Escalate:** If the request is complex, a complaint, or emotionally charged, set `next_action` to `escalate_to_human`.
-        """}
+        {"role": "system", "content": "You are an AI assistant that strictly follows instructions and only outputs valid JSON based on the provided schema and examples."},
+        {"role": "user", "content": prompt}
     ]
     
     try:
-        # Use the OpenAI client to make the API call
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=messages,
-            response_format={"type": "json_object"} # Use JSON mode for reliable output
+            response_format={"type": "json_object"}
         )
         decision_json = response.choices[0].message.content
+        # Manually fill in missing optional keys to prevent Pydantic errors
         decision_data = json.loads(decision_json)
+        decision_data.setdefault('tool_to_use', None)
+        decision_data.setdefault('tool_parameters', None)
+        decision_data.setdefault('kb_search_query', None)
+        decision_data.setdefault('personalized_html_content', None)
+        
         state['decision'] = AgentDecision(**decision_data)
     except Exception as e:
         print(f"Error making OpenAI decision: {e}. Escalating to human.")
-        state['decision'] = AgentDecision(next_action='escalate_to_human', thought="Could not parse LLM response.", tool_to_use=None, tool_parameters=None, reply_content=None, kb_search_query=None)
+        state['decision'] = AgentDecision(next_action='escalate_to_human', thought="Could not parse LLM response.", tool_to_use=None, tool_parameters=None, kb_search_query=None, personalized_html_content=None)
         
     return state
+
+
 def execute_tool_node(state: ReplyGraphState):
     """Executes the tool chosen by the decision_node, including KB search."""
     decision = state['decision']
@@ -127,6 +145,7 @@ def execute_tool_node(state: ReplyGraphState):
         state['kb_info'] = result # Store result in kb_info
         state['tool_output'] = None # Clear tool_output
     elif tool_name == 'get_plan_details':
+        # This tool is now effectively replaced by the KB search, but we can keep it for legacy reasons
         result = clinic_tools.get_plan_details(**params)
         state['tool_output'] = result
         state['kb_info'] = None
