@@ -31,6 +31,7 @@ class Lead(Base):
     # --- NEW COLUMNS ---
     ai_summary = Column(Text, nullable=True)
     ai_drafted_reply = Column(Text, nullable=True)
+    conversation_state = Column(String(50), default='pending_agent_action')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

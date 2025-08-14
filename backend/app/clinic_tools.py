@@ -4,6 +4,8 @@ from .database import SessionLocal
 from .utils import send_email # Import the email utility
 from .models import LeadStatusEnum
 import platform
+from .agents.triage_agent import load_and_populate_template
+import os
 
 # This is a mock knowledge base. In a real app, this would come from a DB.
 KNOWLEDGE_BASE = {
@@ -26,13 +28,6 @@ def get_plan_details(plan_name: str) -> str:
         return f"The {plan_name} service costs ${plan['price']} and includes: {plan['details']}."
     return "I'm sorry, I couldn't find details for that specific plan."
 
-# def get_available_slots(day: str) -> str:
-#     """Gets available appointment slots for a given day."""
-#     day = day.lower()
-#     if day in AVAILABLE_SLOTS:
-#         slots = ", ".join(AVAILABLE_SLOTS[day])
-#         return f"For {day}, we have the following slots available: {slots}."
-#     return f"I'm sorry, I don't see any available slots for {day}."
 def get_available_slots(day: str) -> str:
     """
     Gets REAL available appointment slots from the database for a given day.
@@ -86,16 +81,22 @@ def book_appointment(date: str, time: str, reason: str, lead_id: str) -> str:
             time_str = booked_slot.start_time.strftime("%I:%M %p").lstrip("0")  # ✅ Works everywhere
             # 4. CRITICAL: Send a confirmation email
             subject = "Your Appointment is Confirmed at Bright Smile Clinic!"
-            body = (
-                f"Hi {lead.first_name},\n\n"
-                f"This is a confirmation for your upcoming appointment.\n\n"
-                f"Service: {reason}\n"
-                f"Date: {date_str}\n"
-                f"Time: {time_str}\n\n"
-                f"We look forward to seeing you!\n\n"
-                f"Sincerely,\nThe Bright Smile Clinic Team"
+            context = {
+            "first_name": lead.first_name,
+            "summary": f"Great! I have successfully booked your appointment for a {reason} on {date} at {time}.",
+            "kb_section": "" # Placeholder for now
+             }
+            html_body = load_and_populate_template('nurture_email.html', context)
+            
+            reply_domain = os.getenv("REPLY_DOMAIN")
+            tracking_reply_to = f"replies+{lead.id}@{reply_domain}"
+            send_email(
+                to_email=lead.email,
+                subject=subject,
+                # body=decision.reply_content,
+                html_body=html_body,
+                reply_to_address=tracking_reply_to
             )
-            send_email(to_email=lead.email, subject=subject, body=body)
 
         return f"Great! I have successfully booked your appointment for a {reason} on {date} at {time}. I've also sent a confirmation email with all the details."
     finally:
