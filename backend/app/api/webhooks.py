@@ -106,7 +106,7 @@ async def handle_vapi_tool_calls(request: Request, db: Session = Depends(get_db)
             print(f"Received tool call: {tool_name} with params: {parameters}")
 
             result = None
-            if tool_name == 'get_plan_details':
+            if tool_name == 'get_knowledge':
                 result = clinic_tools.get_plan_details(**parameters)
             elif tool_name == 'get_available_slots':
                 result = clinic_tools.get_available_slots(**parameters)
