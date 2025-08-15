@@ -90,13 +90,13 @@ def book_appointment(date: str, time: str, reason: str, lead_id: str) -> str:
             
             reply_domain = os.getenv("REPLY_DOMAIN")
             tracking_reply_to = f"replies+{lead.id}@{reply_domain}"
-            send_email(
-                to_email=lead.email,
-                subject=subject,
-                # body=decision.reply_content,
-                html_body=html_body,
-                reply_to_address=tracking_reply_to
-            )
+            # send_email(
+            #     to_email=lead.email,
+            #     subject=subject,
+            #     body="",
+            #     html_body=html_body,
+            #     reply_to_address=tracking_reply_to
+            # )
 
         return f"Great! I have successfully booked your appointment for a {reason} on {date} at {time}. I've also sent a confirmation email with all the details."
     finally:
