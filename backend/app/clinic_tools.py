@@ -1,7 +1,7 @@
 from datetime import datetime
 from . import crud
 from .database import SessionLocal
-from .utils import send_email # Import the email utility
+from .utils import send_email, knowledge_base_semantic_search # Import the email utility
 from .models import LeadStatusEnum
 import platform
 from .agents.triage_agent import load_and_populate_template
@@ -19,14 +19,20 @@ AVAILABLE_SLOTS = {
     "wednesday": ["9:00 AM", "11:00 AM"],
 }
 
-def get_plan_details(plan_name: str) -> str:
-    """Gets the price and details for a specific dental plan."""
-    plan_name = plan_name.lower()
-    if plan_name in KNOWLEDGE_BASE:
-        plan = KNOWLEDGE_BASE[plan_name]
-        print(f"The {plan_name} service costs ${plan['price']} and includes: {plan['details']}.")
-        return f"The {plan_name} service costs ${plan['price']} and includes: {plan['details']}."
-    return "I'm sorry, I couldn't find details for that specific plan."
+def get_plan_details(query: str) -> str:
+    # """Gets the price and details for a specific dental plan."""
+    # plan_name = plan_name.lower()
+    # if plan_name in KNOWLEDGE_BASE:
+    #     plan = KNOWLEDGE_BASE[plan_name]
+    #     print(f"The {plan_name} service costs ${plan['price']} and includes: {plan['details']}.")
+    #     return f"The {plan_name} service costs ${plan['price']} and includes: {plan['details']}."
+    # return "I'm sorry, I couldn't find details for that specific plan."
+    results = knowledge_base_semantic_search(query,top_k=2)
+    if results:
+            result = "Here is some relevant information:\n" + "\n".join([res['content'] for res in results])
+    else:
+        result = "No specific information was found in the knowledge base regarding that topic."
+    return result
 
 def get_available_slots(day: str) -> str:
     """

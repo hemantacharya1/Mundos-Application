@@ -30,9 +30,9 @@ def make_tool_based_vapi_call(lead: Lead):
         {
             "type": "function",
             "function": {
-                "name": "get_plan_details",
-                "description": "Gets the price and details for a specific dental plan.",
-                "parameters": {"type": "object", "properties": {"plan_name": {"type": "string"}}}
+                "name": "get_knowledge",
+                "description": "Gets knowledge using query from our knowledge base in vectorDB.",
+                "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
             },
             "server": {"url": tool_handler_url}
         },
@@ -53,7 +53,7 @@ def make_tool_based_vapi_call(lead: Lead):
                 "parameters": {"type": "object", "properties": {"date": {"type": "string"}, "time": {"type": "string"}, "reason": {"type": "string"}}}
             },
             "server": {"url": tool_handler_url}
-        }
+        },
     ]
     # 1. Prepare the contextual data with fallbacks for safety
     lead_name = lead.first_name or "the customer"
