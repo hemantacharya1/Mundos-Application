@@ -127,7 +127,14 @@ def send_reply_node(state: ReplyGraphState):
 
     # --- KEY CHANGE: Convert Markdown to HTML ---
     # The `markdown.markdown()` function does the conversion for us.
-    personalized_body_html = markdown.markdown(final_markdown_content)
+
+    clean_markdown_content = final_markdown_content
+    if clean_markdown_content.startswith("```markdown"):
+        clean_markdown_content = clean_markdown_content[len("```markdown"):].strip()
+    if clean_markdown_content.endswith("```"):
+        clean_markdown_content = clean_markdown_content[:-len("```")].strip()
+
+    personalized_body_html = markdown.markdown(clean_markdown_content,extensions=['tables'])
 
     # For the plain text version, we can use the original Markdown.
     personalized_body_plain = final_markdown_content

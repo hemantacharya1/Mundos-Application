@@ -6,6 +6,7 @@ import re
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 import json
+import markdown
 
 from .. import crud, schemas
 from ..database import SessionLocal
@@ -65,18 +66,18 @@ def triage_node(state: GraphState):
     
     # ENHANCED PROMPT to generate the search query
     prompt = f"""
-    You are a multi-tasking AI assistant for a dental clinic, Your JOb is to successfuly convert the lead. Analyze the following patient inquiry and perform a detailed classification. If no inquiry is present do a general followup and attract the lead.
+    You are a multi-tasking AI assistant for a dental clinic. Your primary objective is to understand a new inquiry so you can help convert this person into a patient.
 
-    Inquiry: "{state['inquiry_notes']}"
+    Analyze the following inquiry: "{state['inquiry_notes']}"
+    If the inquiry is empty, assume it's a general sign-up requiring a warm follow-up.
 
-    Your task is to return a JSON object with FOUR keys:
+    Return a JSON object with FOUR keys:
     1.  "category": Classify into ONE of ['Emergency', 'Insurance_Query', 'Scheduling_Query', 'Service_Inquiry', 'General_Follow_Up'].
-    2.  "summary": Provide a short, concise noun phrase describing the exact service, issue, or topic mentioned (e.g., "teeth whitening cost", "wisdom tooth pain"). Keep it under 6 words.
+    2.  "summary": A short noun phrase describing the topic , will be used as email subject(e.g., "Teeth whitening cost," "wisdom tooth pain," "New inquiry").
     3.  "is_emergency": A boolean value (true/false).
-    4.  "kb_search_query":
-        - If the category is 'Service_Inquiry' or 'Insurance_Query', generate a concise, keyword-focused search query for a vector database.
-        - For all other categories, this value MUST be null.
+    4.  "kb_search_query": If the person is asking about a specific service or insurance, generate a concise search query for our database. Otherwise, this MUST be null.
     """
+
     try:
         response = client.chat.completions.create(
                 model=MODEL_NAME,
@@ -145,76 +146,85 @@ def kb_lookup_node(state: GraphState):
 # They are already designed to handle the kb_info if it exists.
 def generate_email_content_node(state: GraphState):
     """
-    Generates a personalized, human-like email using an LLM and populates
-    a high-quality HTML template.
+    Generates a lead-nurturing email in Markdown, then converts it to HTML.
     """
-    print(f"--- FINAL EMAIL GENERATION for Lead ID: {state['lead_id']} ---")
-    context = {
-        "first_name": state['first_name'],
-        "summary": state['summary']
-    }
-
-    # Emergency path remains unchanged, using a simpler template if needed.
+    print(f"--- LEAD MANAGER EMAIL GENERATION for Lead ID: {state['lead_id']} ---")
+    
+    # Emergency path remains a simple, direct response.
     if state['is_emergency']:
-        state['email_subject'] = f"Urgent Inquiry Received - {state['summary']}"
-        # You can create a separate, simpler emergency HTML template if you wish
-        state['email_body_html'] = load_and_populate_template('emergency_email.html', context)
-        state['email_body_plain'] = f"Hi {state['first_name']}, Thank you for your inquiry regarding an urgent matter: '{state['summary']}'. A team member will call you shortly."
+        state['email_subject'] = f"{state['summary']}"
+        # ... (emergency logic remains the same)
         return state
 
-    # --- Non-Emergency Path: Generate content and use the new template ---
+    # --- Lead Nurturing Path ---
     state['email_subject'] = f"{state['summary']}"
     kb_info = state.get('kb_info')
 
-    # This prompt instructs the LLM to act as a helpful human receptionist.
+    # THE NEW, CONVERSION-FOCUSED PROMPT
     prompt = f"""
-    You are an expert dental receptionist and lead manager for "Bright Smile Clinic". Your tone is warm, professional, and helpful.
-
-    **Your Task:**
-    Write a concise and easy-to-read email body. **Your output must be a clean HTML snippet.**
+    You are an AI assistant for "Bright Smile Clinic", acting as a friendly and professional Lead Nurturing Specialist.
+    Your primary goal is to convert this patient inquiry into a booked appointment.
 
     **Patient Details:**
     - Name: {state['first_name']}
     - Their Inquiry Summary: "{state['summary']}"
 
-    **Internal Knowledge Base Notes (for your reference):**
+    **Internal Knowledge Base Notes (Use this to provide value):**
     ---
-    {kb_info if kb_info else "No specific notes found for this topic."}
+    {kb_info if kb_info else "No specific notes found. Acknowledge their inquiry and pivot to the value of a consultation."}
     ---
 
-    **Instructions for the HTML snippet:**
-    1.  **Be Concise:** Keep the email under 120 words. The goal is to be helpful and start a conversation, not to overwhelm.
-    2.  **Use Simple HTML Tags:** Use `<p>`, `<ul>`, `<li>`, and `<strong>` for emphasis.
-    3.  **DO NOT** include `<html>`, `<head>`, or `<body>` tags. The output must be ONLY the content that goes inside the email body.
-    4.  **Be Selective:** Acknowledge their question about "{state['summary']}". if query is general attempt to covert the lead.
-    5.  **End with a clear call to action** or a question to encourage a reply. Example: "<p>Would you like to know about the services we offer?</p>"
+    **Your Task:**
+    Write a warm, helpful, and persuasive email. Your response MUST be in Markdown format.
+    
+    **Communication & Conversion Tactics:**
+    1.  **Acknowledge & Empathize:** Start by warmly addressing them by name and acknowledging their inquiry about "{state['summary']}".
+    2.  **Provide Value:** Briefly answer their question using the Knowledge Base Notes.
+    3.  **Bridge to the Goal:** Seamlessly connect your answer to the benefit of booking an appointment (e.g., "for a precise quote," "to discuss your options," "to create a personalized plan").
+    4.  **Clear Call to Action (CTA):** ALWAYS end with a direct question to encourage a reply.
+    
+    **Example of a good CTA:**
+    "Would you like to see what times we have available for a complimentary consultation next week?"
+    
+    ### FORMATTING ###
+        -   **Greeting:** ALWAYS start your reply by addressing the user by their first name: '{state['first_name']}'.
+        -   **Format:** Structure your final reply using Markdown for clarity. Use headings (`###`), bold (`**text**`), and lists (`* item`).
+        -   **Persuasive Example:**
     """
 
-    # Generate the personalized content from the LLM
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[
-            {"role": "system", "content": "You are an expert dental clinic receptionist AI. Your job is to write helpful and personal emails to patients."},
+            {"role": "system", "content": "You are a helpful and persuasive dental clinic assistant who communicates in clear Markdown."},
             {"role": "user", "content": prompt}
         ],
-        temperature=0.7 # Add some temperature for more natural-sounding emails
+        temperature=0.7
     )
-    personalized_body_html = response.choices[0].message.content.strip()
+    
+    raw_llm_output = response.choices[0].message.content.strip()
 
-    # ### --- CODE CHANGE: Create plain text by stripping HTML tags --- ###
-    # A simple regex to remove tags for the plain text version of the email.
-    personalized_body_plain = re.sub('<[^<]+?>', '', personalized_body_html).strip()
+    # --- NEW ROBUST PARSING LOGIC TO FIX THE BUG ---
+    # This logic checks for and removes the markdown code block fences.
+    clean_markdown_content = raw_llm_output
+    if clean_markdown_content.startswith("```markdown"):
+        clean_markdown_content = clean_markdown_content[len("```markdown"):].strip()
+    if clean_markdown_content.endswith("```"):
+        clean_markdown_content = clean_markdown_content[:-len("```")].strip()
+    # --- END OF FIX ---
 
-    # Add the generated HTML to the context for the template
-    context['personalized_content'] = personalized_body_html
+    # Use the cleaned content for conversion and logging
+    personalized_body_html = markdown.markdown(clean_markdown_content,extensions=['tables'])
+    personalized_body_plain = clean_markdown_content
 
-    # Populate the HTML template with our newly formatted HTML
+    context = {
+        'first_name': state['first_name'],
+        'personalized_content': personalized_body_html
+    }
+
     state['email_body_html'] = load_and_populate_template('nurture_email.html', context)
-    # The plain text version is now the cleaned HTML
     state['email_body_plain'] = personalized_body_plain
 
     return state
-
 def action_node(state: GraphState):
     """Performs the final actions: updates DB and sends communications."""
     # This function does not need any changes.
@@ -235,7 +245,7 @@ def action_node(state: GraphState):
         send_email(
             to_email=state['email'],
             subject=state['email_subject'],
-            body=state['email_body_plain'],
+            body="",
             html_body=state['email_body_html'],
             reply_to_address=tracking_reply_to
         )
