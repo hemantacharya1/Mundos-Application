@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-        <style>
+    <style>
         /* --- Universal Styles for Email Compatibility --- */
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -40,27 +40,37 @@
         .content {
             padding: 30px 25px;
         }
-        /* Styles for the AI-generated HTML tags */
-        .content p {
-            margin-bottom: 1.2em;
-        }
+        .content p { margin-bottom: 1.2em; }
         .content h3 {
-            color: #005f73; /* Match header for brand consistency */
+            color: #005f73;
             font-size: 18px;
             margin-top: 1.5em;
             margin-bottom: 0.8em;
             border-bottom: 2px solid #e0e6e3;
             padding-bottom: 8px;
         }
-        .content strong {
-            color: #00343d; /* A darker shade of the brand color */
+        .content strong { color: #00343d; }
+        .content ul { padding-left: 25px; margin-bottom: 1.2em; }
+        .content li { margin-bottom: 0.6em; }
+
+        /* --- Table Styling (NEW SECTION) --- */
+        .content table {
+            width: 100%;
+            border-collapse: collapse; /* Removes space between borders */
+            margin-bottom: 1.5em;
         }
-        .content ul {
-            padding-left: 25px;
-            margin-bottom: 1.2em;
+        .content th, .content td {
+            border: 1px solid #e0e6e3; /* Subtle borders matching the container */
+            padding: 12px 15px; /* Adds breathing room inside cells */
+            text-align: left;
         }
-        .content li {
-            margin-bottom: 0.6em;
+        .content th {
+            background-color: #f9fafb; /* Light background for the header row */
+            color: #005f73; /* Brand color for header text */
+            font-weight: 600;
+        }
+        .content tr:nth-child(even) {
+            background-color: #f9fafb; /* Zebra-striping for readability */
         }
 
         /* --- Footer Styling --- */
@@ -72,13 +82,8 @@
             background-color: #f9fafb;
             border-top: 1px solid #e0e6e3;
         }
-        .footer p {
-            margin: 0 0 5px 0;
-        }
-        .footer a {
-            color: #005f73;
-            text-decoration: none;
-        }
+        .footer p { margin: 0 0 5px 0; }
+        .footer a { color: #005f73; text-decoration: none; }
     </style>
 </head>
 <body>
