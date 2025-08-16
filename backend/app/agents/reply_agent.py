@@ -1,212 +1,145 @@
 import os
 import json
-from typing import TypedDict, Literal, List
-import openai
 import re
-from langgraph.graph import StateGraph, END
+from typing import TypedDict, Annotated, List, Literal
 from datetime import date
+
+# --- LangChain Core Imports ---
+from langchain_core.messages import BaseMessage, ToolMessage, AIMessage, HumanMessage, SystemMessage
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, END
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
+
+# --- Pydantic Models for Tool Inputs (ensures type safety) ---
 from pydantic import BaseModel, Field
 
+# --- Existing Project Imports ---
 from .. import crud, schemas, clinic_tools
 from ..database import SessionLocal
 from ..models import LeadStatusEnum, CommTypeEnum, CommDirectionEnum
 from ..utils import knowledge_base_semantic_search, send_email
 from ..agents.triage_agent import load_and_populate_template
 
-# --- Pydantic Models for this Agent ---
-class AgentDecision(BaseModel):
-    next_action: Literal['use_tool', 'reply_to_user', 'escalate_to_human'] = Field(description="The next immediate action the agent should take.")
-    thought: str = Field(description="A brief thought process explaining the decision.")
-    
-    # --- Fields for 'use_tool' action ---
-    tool_to_use: str | None = Field(None, description="The name of the tool to use, if next_action is 'use_tool'.")
-    tool_parameters: dict | None = Field(None, description="The parameters for the tool, if next_action is 'use_tool'.")
-    kb_search_query: str | None = Field(None, description="A search query for the vector database if the tool is 'search_knowledge_base'.")
+# --- 1. Define Tools using the @tool decorator ---
+# Docstrings are now the descriptions for the LLM.
 
-    # --- Field for 'reply_to_user' action ---
-    personalized_html_content: str | None = Field(None, description="A clean HTML snippet to be injected into the main email template, if next_action is 'reply_to_user'.")
-# --- Updated LangGraph State ---
-class ReplyGraphState(TypedDict):
-    lead_id: str
-    first_name: str
-    email: str
-    conversation_history: List[str] # We'll now pass the whole history
-    
-    # Agent's working memory
-    decision: AgentDecision | None = None
-    tool_output: str | None = None
-    kb_search_query: str | None = None
-    kb_info: str | None = None
-
-# --- Configure Gemini API ---
-# genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-# model = genai.GenerativeModel(
-#     model_name='gemini-1.5-flash',
-#     system_instruction="You are an autonomous AI assistant for a dental clinic. Your job is to handle email conversations with patients, use tools to answer questions, book appointments, and escalate to a human only when necessary."
-# )
-client = openai.OpenAI()
-OPENAI_MODEL = "gpt-4o-mini" 
-
-# --- Agent Nodes ---
-
-def decision_node(state: ReplyGraphState):
-    """The core 'brain' of the agent. It decides the next action using a more robust prompt."""
-    print(f"--- DECISION NODE (OpenAI) for Lead ID: {state['lead_id']} ---")
-    
-    tools_description = """
-    - `search_knowledge_base(query: str)`: Use this to find information about dental procedures, insurance policies, or general clinic info.
-    - `get_available_slots(day: str)`: Use this to find open appointment times.
-    - `book_appointment(date: str, time: str, reason: str)`: Use this to finalize a booking.
+@tool
+def search_knowledge_base(query: str) -> str:
     """
-    
-    previous_output_context = ""
-    if state.get('tool_output'):
-        previous_output_context = f"\n**Context from Previous Tool Result:**\n{state['tool_output']}\n"
-    elif state.get('kb_info'):
-        previous_output_context = f"\n**Context from Knowledge Base Search:**\n{state['kb_info']}\n"
-
-    # This new prompt is more direct and provides clear JSON examples for the LLM to follow.
-    prompt = f"""
-    You are an autonomous email agent for a dental clinic. Your goal is to resolve the user's needs efficiently.
-    Today's Date is {date.today().strftime("%Y-%m-%d")}.
-
-    **Conversation History (most recent message last):**
-    {state['conversation_history']}
-
-    **Previous Output Context
-    {previous_output_context}
-
-    **Available Tools:**
-    {tools_description}
-
-    **Your Task:**
-    Analyze the full context and decide on the single next step. Respond with a JSON object.
-
-    1.  **If you need more information to answer the user's question**, your `next_action` MUST be `"use_tool"`.
-        - Set `tool_to_use` to `"search_knowledge_base"`.
-        - Generate a `kb_search_query` based on the user's question.
-        - Example: {{"next_action": "use_tool", "thought": "The user is asking about crowns, I need to look that up.", "tool_to_use": "search_knowledge_base", "kb_search_query": "cost of dental crowns"}}
-
-    2.  **If the user wants to schedule and have mention a available slot**, your `next_action` MUST be `"use_tool"`.
-        - Set `tool_to_use` to the appropriate tool (`book_appointment`).
-        - Provide the necessary `tool_parameters`.
-        - Example: {{"next_action": "use_tool", "thought": "The user wants to book for Tuesday afternoon.", "tool_to_use": "book_appointment", "tool_parameters": {{"date": "Tuesday", "time": "2:00 PM", "reason": "checkup"}}}}
-
-    3.  **If the user wants to check availability or have asked to book appointement without mentioning a slot then offer available slots and reply to get back time from user**, your `next_action` MUST be `"use_tool"`.
-        - Set `tool_to_use` to the appropriate tool (`get_available_slots`).
-        - Provide the necessary `tool_parameters`.
-        - Example: {{"next_action": "use_tool", "thought": "The user wants to know available slots", "tool_to_use": "get_available_slots", "tool_parameters": {{"day": "Tuesday","}}}}
-
-
-    4.  **If you have all the information you need to reply and have previous_output_context**, your `next_action` MUST be `"reply_to_user"`.
-        - Generate a `personalized_html_content` snippet for the email body. Use simple HTML tags like `<p>` and `<strong>`.
-        - Example: {{"next_action": "reply_to_user", "thought": "I have the KB info about crowns, now I can answer the user.", "personalized_html_content": "<p>Thanks for asking! A dental crown typically costs between X and Y. Would you like to book a consultation?</p>"}}
-
-    5.  **If the request is a complaint, very complex, or emotionally charged**, your `next_action` MUST be `"escalate_to_human"`.
-        - Example: {{"next_action": "escalate_to_human", "thought": "The user seems upset about their last visit. A human should handle this."}}
+    Use this to find information about dental procedures, insurance policies,
+    clinic pricing, or general clinic information when you don't know the answer.
     """
-    
-    messages = [
-        {"role": "system", "content": "You are an AI assistant that strictly follows instructions and only outputs valid JSON based on the provided schema and examples."},
-        {"role": "user", "content": prompt}
-    ]
-    
+    print(f"--- TOOL: Searching Knowledge Base for: '{query}' ---")
+    search_results = knowledge_base_semantic_search(query=query, top_k=2)
+    if search_results:
+        return "Relevant Information Found:\n" + "\n".join([res['content'] for res in search_results])
+    return "No specific information was found in the knowledge base about that topic."
+
+@tool
+def get_available_slots(day: str) -> str:
+    """Use this to find available appointment times or slots for a specific day that the user mentions."""
+    print(f"--- TOOL: Getting available slots for: {day} ---")
+    return clinic_tools.get_available_slots(day=day)
+
+class BookAppointmentInput(BaseModel):
+    date: str = Field(description="The exact date for the appointment, e.g., '2025-09-23'.")
+    time: str = Field(description="The exact time for the appointment, e.g., '14:00'.")
+    reason: str = Field(description="A brief reason for the visit, e.g., 'checkup', 'tooth pain'.")
+
+@tool
+def book_appointment(date: str, time: str, reason:str, lead_id: str) -> str:
+    """Use this to finalize an appointment booking once a specific date and time have been confirmed by the user."""
+    print(f"--- TOOL: Booking appointment for Lead ID {lead_id} at {date} {time} ---")
+    # The lead_id is injected by our agent node, not guessed by the LLM
+    return clinic_tools.book_appointment(date=date, time=time, reason=reason, lead_id=lead_id)
+
+@tool
+def escalate_to_human(reason: str, lead_id: str) -> str:
+    """
+    Use this tool ONLY when a conversation is a complaint, is emotionally charged,
+    or is too complex for you to handle. This is for situations needing a human touch.
+    """
+    print(f"--- TOOL: Escalating to human for Lead ID: {lead_id} ---")
+    db = SessionLocal()
     try:
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=messages,
-            response_format={"type": "json_object"}
-        )
-        decision_json = response.choices[0].message.content
-        # Manually fill in missing optional keys to prevent Pydantic errors
-        decision_data = json.loads(decision_json)
-        decision_data.setdefault('tool_to_use', None)
-        decision_data.setdefault('tool_parameters', None)
-        decision_data.setdefault('kb_search_query', None)
-        decision_data.setdefault('personalized_html_content', None)
-        
-        state['decision'] = AgentDecision(**decision_data)
-    except Exception as e:
-        print(f"Error making OpenAI decision: {e}. Escalating to human.")
-        state['decision'] = AgentDecision(next_action='escalate_to_human', thought="Could not parse LLM response.", tool_to_use=None, tool_parameters=None, kb_search_query=None, personalized_html_content=None)
-        
-    return state
+        lead = crud.get_lead_by_id(db, lead_id)
+        if lead:
+            lead.status = LeadStatusEnum.needs_immediate_attention
+            lead.ai_summary = f"AI Escalation Reason: {reason}"
+            db.commit()
+            # This reply informs the agent that the task is done and it should not continue.
+            return "Successfully flagged for human attention. Do not reply to the user further."
+    finally:
+        db.close()
+    return "Escalation failed: Could not find lead."
 
 
-def execute_tool_node(state: ReplyGraphState):
-    """Executes the tool chosen by the decision_node, including KB search."""
-    decision = state['decision']
-    tool_name = decision.tool_to_use
-    params = decision.tool_parameters
-    print(f"--- EXECUTING TOOL: {tool_name} with params: {params} ---")
+# --- 2. Define LangGraph State ---
+class ReplyGraphState(TypedDict):
+    messages: Annotated[list, add_messages]
+    lead_id: str
+    email: str
+    first_name: str
+
+
+# --- 3. Configure LLM and Tools ---
+OPENAI_MODEL = "gpt-4o-mini"
+tools = [search_knowledge_base, get_available_slots, book_appointment, escalate_to_human]
+
+# The ToolNode is a pre-built node that executes tools for us
+tool_node = ToolNode(tools)
+
+# Configure the LLM and bind the tools to it
+llm = ChatOpenAI(model=OPENAI_MODEL, temperature=0, streaming=False)
+llm_with_tools = llm.bind_tools(tools)
+
+
+# --- 4. Define Agent Nodes ---
+
+def agent_node(state: ReplyGraphState):
+    """The core 'brain' of the agent. It decides whether to reply or use a tool."""
+    print(f"--- AGENT NODE for Lead ID: {state['lead_id']} ---")
+
+    # This is a key pattern: we inject context from the state into tool calls
+    # without the LLM needing to know about it.
+    response = llm_with_tools.invoke(state['messages'])
     
-    result = "Error: Tool not found."
-    # Add the new KB search tool to our execution logic
-    if tool_name == 'search_knowledge_base':
-        query = decision.kb_search_query
-        search_results = knowledge_base_semantic_search(query=query, top_k=2)
-        if search_results:
-            result = "Here is some relevant information:\n" + "\n".join([res['content'] for res in search_results])
-        else:
-            result = "No specific information was found in the knowledge base regarding that topic."
-        state['kb_info'] = result # Store result in kb_info
-        state['tool_output'] = None # Clear tool_output
-    elif tool_name == 'get_plan_details':
-        # This tool is now effectively replaced by the KB search, but we can keep it for legacy reasons
-        result = clinic_tools.get_plan_details(**params)
-        state['tool_output'] = result
-        state['kb_info'] = None
-    elif tool_name == 'get_available_slots':
-        result = clinic_tools.get_available_slots(**params)
-        state['tool_output'] = result
-        state['kb_info'] = None
-    elif tool_name == 'book_appointment':
-        result = clinic_tools.book_appointment(**params, lead_id=state['lead_id'])
-        state['tool_output'] = result
-        state['kb_info'] = None
-
-    # After executing a tool, we must always make a new decision
-    state['decision'] = None
-    return state
+    if response.tool_calls:
+        for call in response.tool_calls:
+            if "lead_id" in call["args"]:
+                 call["args"]["lead_id"] = state['lead_id']
     
+    return {"messages": [response]}
+
+
 def send_reply_node(state: ReplyGraphState):
-    """
-    Sends a high-quality, template-based reply using AI-generated HTML content.
-    """
-    print(f"--- SENDING TEMPLATE-BASED REPLY to Lead ID: {state['lead_id']} ---")
-    decision = state['decision']
+    """This is a terminal node. It sends the final email reply."""
+    print(f"--- SENDING REPLY to Lead ID: {state['lead_id']} ---")
+    final_message_content = state['messages'][-1].content
+    print("final email",final_message_content)
     
-    # The LLM has generated the core HTML content for us.
-    personalized_body_html = decision.personalized_html_content
-
-    # Create a plain text version by stripping HTML tags.
-    # This is crucial for email clients that don't render HTML.
+    # The AI's response content is now directly used as the personalized HTML.
+    # The system prompt has instructed it to generate simple HTML.
+    personalized_body_html = final_message_content
     personalized_body_plain = re.sub('<[^<]+?>', '', personalized_body_html).strip()
 
-    # Populate our main, high-quality template
-    context = {
-        "personalized_content": personalized_body_html
-    }
-    # NOTE: We are using a new template name here for clarity.
-    # You should use the same template file as your other agent.
+    context = {"personalized_content": personalized_body_html, "first_name": state['first_name']}
     html_body = load_and_populate_template('nurture_email.html', context)
     
     reply_domain = os.getenv("REPLY_DOMAIN")
     tracking_reply_to = f"replies+{state['lead_id']}@{reply_domain}"
-    
-    # The subject can be static for replies, or you can have the LLM generate it.
     subject = f"Re: Your Inquiry with Bright Smile Clinic"
     
-    # Call the utility that supports HTML
     send_email(
         to_email=state['email'],
         subject=subject,
-        body=personalized_body_plain, # Plain text version for compatibility
-        html_body=html_body,         # Rich HTML version
+        body=personalized_body_plain,
+        html_body=html_body,
         reply_to_address=tracking_reply_to
     )
     
-    # Log this automated reply
     db = SessionLocal()
     try:
         crud.create_communication_log(db, schemas.CommunicationCreate(
@@ -220,72 +153,111 @@ def send_reply_node(state: ReplyGraphState):
     
     return state
 
-def escalate_to_human_node(state: ReplyGraphState):
-    """Flags the lead for immediate human attention."""
-    print(f"--- ESCALATING to human for Lead ID: {state['lead_id']} ---")
-    db = SessionLocal()
-    try:
-        lead = crud.get_lead_by_id(db, state['lead_id'])
-        if lead:
-            lead.status = LeadStatusEnum.needs_immediate_attention
-            # Save the agent's thought process as a summary for the human
-            lead.ai_summary = state['decision'].thought
-            db.commit()
-    finally:
-        db.close()
-    return state
 
-# --- Conditional Router ---
-def router(state: ReplyGraphState):
-    """Routes to the next appropriate node based on the agent's decision."""
-    if not state.get('decision'):
-        # This will be true after a tool is used, forcing a re-evaluation
-        return 'decision_node'
-        
-    next_action = state['decision'].next_action
-    if next_action == 'use_tool':
-        return 'execute_tool_node'
-    elif next_action == 'reply_to_user':
-        return 'send_reply_node'
-    elif next_action == 'escalate_to_human':
-        return 'escalate_to_human_node'
-    return END
+# --- 5. Define Conditional Router ---
+def router(state: ReplyGraphState) -> Literal["tools", "__end__"]:
+    """Routes to the tool executor or ends the graph if no tools are called."""
+    last_message = state["messages"][-1]
+    if last_message.tool_calls:
+        # If the agent decided to escalate, it's a terminal action.
+        if any(call['name'] == 'escalate_to_human' for call in last_message.tool_calls):
+            return "tools" # Execute the escalation tool, then end.
+        return "tools"
+    # Otherwise, the LLM has generated a final reply.
+    return "__end__"
 
-# --- Build the Graph ---
+
+# --- 6. Build the Graph ---
 workflow = StateGraph(ReplyGraphState)
-workflow.add_node("decision_node", decision_node)
-workflow.add_node("execute_tool_node", execute_tool_node)
-workflow.add_node("send_reply_node", send_reply_node)
-workflow.add_node("escalate_to_human_node", escalate_to_human_node)
 
-workflow.set_entry_point("decision_node")
-workflow.add_conditional_edges("decision_node", router)
-# After executing a tool, the agent must re-evaluate the situation
-workflow.add_edge("execute_tool_node", "decision_node")
-workflow.add_edge("send_reply_node", END)
-workflow.add_edge("escalate_to_human_node", END)
+workflow.add_node("agent", agent_node)
+workflow.add_node("tools", tool_node)
+workflow.add_node("send_reply", send_reply_node)
 
+workflow.set_entry_point("agent")
+
+workflow.add_conditional_edges(
+    "agent",
+    router,
+    # The router will decide which node to visit next
+    {
+        "tools": "tools",
+        "__end__": "send_reply" # If no tools, send the reply
+    }
+)
+
+# After tools are executed, loop back to the agent to reassess
+workflow.add_edge("tools", "agent")
+
+# After sending the reply, the process is finished
+workflow.add_edge("send_reply", END)
+
+# Compile the graph
 reply_app_graph = workflow.compile()
 
-# --- Main function to run the agent ---
+
+# --- 7. Main function to run the agent ---
 def run_reply_analyzer(lead_id: str):
     db = SessionLocal()
     try:
         lead = crud.get_lead_by_id(db, lead_id)
         if not lead:
+            print(f"No lead found for ID: {lead_id}")
             return
         
-        # Fetch the conversation history
         comms = crud.get_communications_by_lead_id(db, lead_id=lead.id)
-        # Format history for the LLM
-        conversation_history = [f"{c.direction}: {c.content}" for c in comms]
+        messages: List[BaseMessage] = []
+        for c in comms:
+            if c.direction == CommDirectionEnum.incoming:
+                messages.append(HumanMessage(content=c.content))
+            elif c.direction == CommDirectionEnum.outgoing_auto:
+                # We log the plain text, but for the model's history, it's an AIMessage
+                # This could be improved by logging the full AI output if needed
+                messages.append(AIMessage(content=c.content.split('\n\n', 1)[-1]))
+
+        # This new system prompt is cleaner and focuses on the persona and task.
+        system_prompt = f"""
+            You are an autonomous AI assistant and Lead Manager for 'Bright Smile Clinic'. Your name is 'Neha'.
+            Your job is to handle email conversations with patients efficiently and professionally.
+            Today's Date is {date.today().strftime("%Y-%m-%d")}.
+
+            Your Core Tasks:
+            1.  Answer questions about the clinic, procedures, and insurance using your tools.
+            2.  Help users find available appointments and book them.
+            3.  Escalate to a human for any complaints, emotionally charged language, or highly complex medical questions you cannot answer.
+            4.  Try Converting Lead with your available tools.
+            5.  Properly formatted html for email with breaks to make it professional, dont dump everything in one line.
+
+            Your Email Communication & Formatting Style:
+            -   **Persona:** Act as a friendly, empathetic, and highly professional communications specialist.
+            -   **Greeting:** ALWAYS start your reply by addressing the user by their first name: '{lead.first_name}'.
+            -   **Clarity is Key:** Keep your language concise and easy to understand.
+            -   **HTML Generation:** Your primary goal is to generate a clean, beautiful, and well-structured HTML snippet for the email body.
+                -   Think of your response as the content for a premium email. Use HTML to structure it for maximum readability.
+                -   **Allowed HTML Tags:** You can use `<p>`, `<strong>` for emphasis, `<ul>`, `<li>` for lists, `<h3>` for section titles, and `<br>` for line breaks.
+                -   **Good Formatting Example:** To show available times, you should structure it like this: `<h3>Available Times for Friday</h3><ul><li>10:00 AM</li><li>11:00 AM</li></ul>`
+                -   **Your output MUST be pure HTML.** Do not include any Markdown (like `*` or `#`) inside html structure. Your response will be injected directly into an HTML template.
+
+            Important Rules:
+            -   Do not include any Markdown (like `*` or `#`) inside html structure. Your response will be injected directly into an HTML template.
+            -   The 'lead_id' will be provided to tools automatically. Do not ask the user for it.
+            -   **Never use the word "lead" when communicating with the person or in email.** Refer to them simply by their name.
+            """
+        
+        initial_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)] + messages
 
         initial_state = ReplyGraphState(
             lead_id=str(lead.id),
-            first_name=lead.first_name,
             email=lead.email,
-            conversation_history=conversation_history
+            first_name=lead.first_name,
+            messages=initial_messages
         )
+        
+        print(f"\n--- INVOKING GRAPH FOR LEAD: {lead.first_name} ({lead_id}) ---\n")
         reply_app_graph.invoke(initial_state)
+        print(f"\n--- GRAPH EXECUTION FINISHED FOR LEAD: {lead.first_name} ({lead_id}) ---\n")
+
+    except Exception as e:
+        print(f"An error occurred while running the reply analyzer for lead {lead_id}: {e}")
     finally:
         db.close()
