@@ -30,6 +30,8 @@ async def handle_email_reply(
     1. Halts the nurture sequence by updating status to 'responded'.
     2. Triggers the Reply Intent Analyzer agent in the background.
     """
+    print(request)
+    print('='*500)
     form_data = await request.form()
     to_address = form_data.get('to', '')
     email_body = form_data.get('text', '')

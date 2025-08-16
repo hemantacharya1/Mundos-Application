@@ -65,7 +65,7 @@ def triage_node(state: GraphState):
     
     # ENHANCED PROMPT to generate the search query
     prompt = f"""
-    You are a multi-tasking AI assistant for a dental clinic. Analyze the following patient inquiry and perform a detailed classification.
+    You are a multi-tasking AI assistant for a dental clinic, Your JOb is to successfuly convert the lead. Analyze the following patient inquiry and perform a detailed classification. If no inquiry is present do a general followup and attract the lead.
 
     Inquiry: "{state['inquiry_notes']}"
 
@@ -163,12 +163,12 @@ def generate_email_content_node(state: GraphState):
         return state
 
     # --- Non-Emergency Path: Generate content and use the new template ---
-    state['email_subject'] = f"Following Up on Your Inquiry about {state['summary']}"
+    state['email_subject'] = f"{state['summary']}"
     kb_info = state.get('kb_info')
 
     # This prompt instructs the LLM to act as a helpful human receptionist.
     prompt = f"""
-    You are an expert dental receptionist for "Bright Smile Clinic". Your tone is warm, professional, and helpful.
+    You are an expert dental receptionist and lead manager for "Bright Smile Clinic". Your tone is warm, professional, and helpful.
 
     **Your Task:**
     Write a concise and easy-to-read email body. **Your output must be a clean HTML snippet.**
@@ -186,8 +186,8 @@ def generate_email_content_node(state: GraphState):
     1.  **Be Concise:** Keep the email under 120 words. The goal is to be helpful and start a conversation, not to overwhelm.
     2.  **Use Simple HTML Tags:** Use `<p>`, `<ul>`, `<li>`, and `<strong>` for emphasis.
     3.  **DO NOT** include `<html>`, `<head>`, or `<body>` tags. The output must be ONLY the content that goes inside the email body.
-    4.  **Be Selective:** Acknowledge their question about "{state['summary']}". Mention you work with major PPO plans and can do a **complimentary benefits check**. Briefly mention the membership plan as an alternative.
-    5.  **End with a clear call to action** or a question to encourage a reply. Example: "<p>Would you like us to check your insurance benefits for you?</p>"
+    4.  **Be Selective:** Acknowledge their question about "{state['summary']}". if query is general attempt to covert the lead.
+    5.  **End with a clear call to action** or a question to encourage a reply. Example: "<p>Would you like to know about the services we offer?</p>"
     """
 
     # Generate the personalized content from the LLM

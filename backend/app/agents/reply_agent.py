@@ -55,7 +55,7 @@ def decision_node(state: ReplyGraphState):
     
     tools_description = """
     - `search_knowledge_base(query: str)`: Use this to find information about dental procedures, insurance policies, or general clinic info.
-    - `get_available_slots(day: str)`: Use this to find open appointment times.
+    - `get_available_slots(day: str)`: Use this to find available appointment times/slots.
     - `book_appointment(date: str, time: str, reason: str)`: Use this to finalize a booking.
     """
     
@@ -64,6 +64,8 @@ def decision_node(state: ReplyGraphState):
         previous_output_context = f"\n**Context from Previous Tool Result:**\n{state['tool_output']}\n"
     elif state.get('kb_info'):
         previous_output_context = f"\n**Context from Knowledge Base Search:**\n{state['kb_info']}\n"
+
+    print(previous_output_context)
 
     # This new prompt is more direct and provides clear JSON examples for the LLM to follow.
     prompt = f"""
@@ -87,16 +89,17 @@ def decision_node(state: ReplyGraphState):
         - Generate a `kb_search_query` based on the user's question.
         - Example: {{"next_action": "use_tool", "thought": "The user is asking about crowns, I need to look that up.", "tool_to_use": "search_knowledge_base", "kb_search_query": "cost of dental crowns"}}
 
-    2.  **If the user wants to schedule and have mention a available slot**, your `next_action` MUST be `"use_tool"`.
+    2.  **If the user wants to schedule and have mention a available slot and the slot is available then**, your `next_action` MUST be `"use_tool"`.
         - Set `tool_to_use` to the appropriate tool (`book_appointment`).
         - Provide the necessary `tool_parameters`.
         - Example: {{"next_action": "use_tool", "thought": "The user wants to book for Tuesday afternoon.", "tool_to_use": "book_appointment", "tool_parameters": {{"date": "Tuesday", "time": "2:00 PM", "reason": "checkup"}}}}
+        if its unavailable ask the user for different time. if possible send available slots.
 
-    3.  **If the user wants to check availability or have asked to book appointement without mentioning a slot then offer available slots and reply to get back time from user**, your `next_action` MUST be `"use_tool"`.
-        - Set `tool_to_use` to the appropriate tool (`get_available_slots`).
+    3.  **If the user wants to check availability or have asked to book appointement without mentioning a slot then offer available slots and reply to get back time from user**, your `next_action` MUST be `"use_tool" or `reply_to_user`.
+        - Set `tool_to_use` to the appropriate tool (`get_available_slots` or `reply_to_user`).
         - Provide the necessary `tool_parameters`.
         - Example: {{"next_action": "use_tool", "thought": "The user wants to know available slots", "tool_to_use": "get_available_slots", "tool_parameters": {{"day": "Tuesday","}}}}
-
+        - Example: {{"next_action": "reply_to_user", "thought": "I have the available slots and should send it to user.", "personalized_html_content": "<p>Here are the available slots</p>"}}
 
     4.  **If you have all the information you need to reply and have previous_output_context**, your `next_action` MUST be `"reply_to_user"`.
         - Generate a `personalized_html_content` snippet for the email body. Use simple HTML tags like `<p>` and `<strong>`.
@@ -119,6 +122,7 @@ def decision_node(state: ReplyGraphState):
         )
         decision_json = response.choices[0].message.content
         # Manually fill in missing optional keys to prevent Pydantic errors
+        print(decision_json)
         decision_data = json.loads(decision_json)
         decision_data.setdefault('tool_to_use', None)
         decision_data.setdefault('tool_parameters', None)
@@ -126,6 +130,7 @@ def decision_node(state: ReplyGraphState):
         decision_data.setdefault('personalized_html_content', None)
         
         state['decision'] = AgentDecision(**decision_data)
+        print(state['decision'])
     except Exception as e:
         print(f"Error making OpenAI decision: {e}. Escalating to human.")
         state['decision'] = AgentDecision(next_action='escalate_to_human', thought="Could not parse LLM response.", tool_to_use=None, tool_parameters=None, kb_search_query=None, personalized_html_content=None)
