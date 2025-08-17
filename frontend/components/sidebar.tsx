@@ -12,7 +12,7 @@ import { useSidebar } from "@/components/sidebar-provider"
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "All Leads", href: "/leads", icon: Users },
-  { name: "Handoff Queue", href: "/handoff", icon: UserCheck },
+  // { name: "Handoff Queue", href: "/handoff", icon: UserCheck },
   { name: "Appointments", href: "/appointments", icon: Calendar },
   { name: "Knowledge Base", href: "/knowledge-base", icon: BookOpen },
 ]
