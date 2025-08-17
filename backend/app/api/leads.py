@@ -11,6 +11,7 @@ from ..database import get_db
 from datetime import datetime
 from fastapi import BackgroundTasks # Add this import
 from typing import List # Make sure this is imported from typing
+from ..agents.triage_agent import load_and_populate_template
 
 router = APIRouter(
     prefix="/leads",
@@ -168,17 +169,24 @@ def send_manual_reply(
     lead = crud.get_lead_by_id(db, lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-
+    print(lead.first_name)
     # Construct the tracking reply-to address
     reply_domain = os.getenv("REPLY_DOMAIN")
     tracking_reply_to = f"replies+{lead.id}@{reply_domain}"
     subject = f"Re: Your inquiry with Bright Smile Clinic"
 
+    context = {
+        'first_name': lead.first_name,
+        'personalized_content': f'<p>{content}</p>'
+    }
+
+    html_content = load_and_populate_template('nurture_email.html', context)
     # Send the email
     success = send_email(
         to_email=lead.email,
         subject=subject,
-        body=content,
+        body="",
+        html_body=html_content,
         reply_to_address=tracking_reply_to
     )
 

@@ -1,77 +1,90 @@
-from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
 import os
 import json
+import markdown
+from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
 import openai
+
+# --- Project Imports ---
 from .. import crud, models, schemas, voice_utils
 from ..database import SessionLocal
-from ..utils import send_email, send_sms
+from ..utils import send_email, send_sms, knowledge_base_semantic_search
 from ..models import LeadStatusEnum, CommTypeEnum, CommDirectionEnum
-
-# We can reuse the same Gemini model configuration
 from ..agents.triage_agent import load_and_populate_template
 
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-MODEL_NAME = "gpt-4o-mini"
+# --- OpenAI Client Initialization (Self-contained, no external llm_client needed) ---
+try:
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    MODEL_NAME = "gpt-4o-mini"
+except Exception as e:
+    print(f"FATAL: Could not initialize OpenAI client in nurture_engine.py: {e}")
+    client = None
 
-# --- NEW: Centralized Content Generation Function ---
+# --- NEW: Centralized, High-Performance Content Generation ---
 
-def generate_follow_up_content(lead: models.Lead, attempt_number: int, kb_info: str | None = None) -> dict:
+def generate_follow_up_content(lead: models.Lead, attempt_number: int) -> dict:
     """
-    Generates personalized content for a specific follow-up attempt.
-    Returns a dictionary with 'subject', 'body_plain', and 'body_html'.
+    Generates personalized, KB-aware, Markdown-formatted content for follow-ups.
     """
+    if not client:
+        # Fallback if OpenAI client fails to initialize
+        return {"subject": "Following Up", "body_plain": "Just checking in.", "body_html": "<p>Just checking in.</p>"}
+
     print(f"--- Generating content for Lead {lead.lead_id}, Attempt #{attempt_number} ---")
-    
-    # This prompt asks the LLM to act as a creative copywriter for follow-ups
-    prompt = f"""
-    You are a marketing expert at a dental clinic. Your task is to write a concise, friendly, and non-pushy follow-up message for a potential patient.
+
+    # Step 1: Search the Knowledge Base
+    search_query = lead.inquiry_notes
+    kb_results = knowledge_base_semantic_search(search_query, top_k=2)
+    kb_info = "\n".join([res['content'] for res in kb_results]) if kb_results else "No specific information was found."
+
+    # Step 2: Use a strategic prompt similar to the reply_agent
+    system_prompt = "You are a helpful and persuasive marketing assistant for a dental clinic. Your goal is to re-engage a cold lead by providing value and encouraging them to book an appointment. Respond in a structured JSON format."
+    user_prompt = f"""
+    Your task is to write a friendly and persuasive follow-up message for a potential patient.
 
     **Patient Name:** {lead.first_name}
     **Their Original Inquiry Was About:** "{lead.inquiry_notes}"
     **This is Follow-up Attempt Number:** {attempt_number}
-    **Relevant Information from our Knowledge Base:** {kb_info or 'None'}
+    **Relevant Information from our Knowledge Base:**
+    ---
+    {kb_info}
+    ---
 
-    Based on this, generate a short message.
-    - For attempt 2 (SMS), it should be very brief and conversational.
-    - For the final email attempt, it should be a "last chance" message that offers value (e.g., a free consultation) and clearly states it's the last automated message.
-    - If there is Knowledge Base info, incorporate it to be helpful.
+    **Instructions:**
+    1.  Synthesize the Knowledge Base info into a helpful, easy-to-understand paragraph.
+    2.  Craft a message that bridges from their original inquiry to a clear call-to-action (CTA).
+    3.  For the final email attempt (attempt 4), create a sense of value (e.g., mention a free consultation) and gentle urgency.
+    4.  The message body MUST be formatted in Markdown (using headings, lists, bold text).
+    5.  ALWAYS end the message with a question or a clear next step.
+    6.  Attempt 2 is for SMS so generate the markdown_body/content in less then 100 words. 
 
-    Return ONLY a JSON object with two keys: "subject" (for emails) and "body" (for the message content).
+    Return ONLY a JSON object with two keys: "subject" (a compelling subject line) and "markdown_body" (the full message content in Markdown).
     """
     
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are a helpful marketing assistant for a dental clinic. You will be given details and must return a JSON object with 'subject' and 'body' keys."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
-            response_format={"type": "json_object"} # Use JSON mode for reliability
+            response_format={"type": "json_object"}
         )
         content_data = json.loads(response.choices[0].message.content)
         subject = content_data.get('subject', 'A quick follow-up from Bright Smile Clinic')
-        body_plain = content_data.get('body', 'Just checking in!')
-
+        markdown_body = content_data.get('markdown_body', 'Just checking in!')
     except Exception as e:
         print(f"Error generating follow-up content with OpenAI: {e}. Using fallback.")
         subject = "A quick follow-up from Bright Smile Clinic"
-        body_plain = f"Hi {lead.first_name}, just checking in on your recent inquiry about {lead.inquiry_notes}."
+        markdown_body = f"Hi {lead.first_name},\n\nJust checking in on your recent inquiry about '{lead.inquiry_notes}'. Please let us know if we can help."
 
-    # Populate the HTML template for the final email
-    body_html = None
-    if attempt_number >= 3: # Assuming attempt 3 or 4 is the final email
-        context = {
-            "first_name": lead.first_name,
-            "summary": body_plain, # Use the generated body as the main content
-            "kb_section": f'<div class="kb-section"><p>{kb_info}</p></div>' if kb_info else ""
-        }
-        body_html = load_and_populate_template('nurture_email.html', context)
+    # Step 3: Convert Markdown to HTML, exactly like the reply_agent
+    html_body = markdown.markdown(markdown_body, extensions=['tables'])
 
-    return {"subject": subject, "body_plain": body_plain, "body_html": body_html}
+    return {"subject": subject, "body_plain": markdown_body, "body_html": html_body}
 
 
-# --- The Main Nurture Job (Now much cleaner) ---
+# --- The Main Nurture Job (Using the new content and templates) ---
 
 def nurture_and_recall_job():
     """
@@ -90,14 +103,10 @@ def nurture_and_recall_job():
             now = datetime.now(tz=lead.updated_at.tzinfo)
             time_since_last_update = now - lead.updated_at
             
-            # --- FUTURE KB HOOK ---
-            # Here you would call your KB search function based on the lead's inquiry
-            # kb_info = your_kb_search_function(lead.inquiry_notes)
-            kb_info = None # Placeholder for now
-
             # --- Attempt 2: SMS (e.g., 2 days after initial contact) ---
-            if lead.nurture_attempts == 1 and time_since_last_update > timedelta(days=2):
-                content = generate_follow_up_content(lead, attempt_number=2, kb_info=kb_info)
+            if lead.nurture_attempts == 1 and time_since_last_update > timedelta(day=1):
+                content = generate_follow_up_content(lead, attempt_number=2)
+                # For SMS, we use the plain text (Markdown) version, which is clean and readable.
                 if send_sms(lead.phone_number, content['body_plain']):
                     lead.nurture_attempts += 1
                     crud.create_communication_log(db, schemas.CommunicationCreate(
@@ -106,8 +115,9 @@ def nurture_and_recall_job():
                     db.commit()
 
             # --- Attempt 3: AI Phone Call (e.g., 4 days after initial contact) ---
-            elif lead.nurture_attempts == 2 and time_since_last_update > timedelta(days=2): # 2 days after SMS
-                if lead.phone_number:
+            elif lead.nurture_attempts == 2 and time_since_last_update > timedelta(day=2):
+                # ... (This logic remains the same)
+                 if lead.phone_number:
                     call_data = voice_utils.make_tool_based_vapi_call(lead)
                     if call_data:
                         lead.nurture_attempts += 1
@@ -115,27 +125,31 @@ def nurture_and_recall_job():
                             lead_id=lead.id, type=CommTypeEnum.phone_call, direction=CommDirectionEnum.outgoing_auto, content=f"AI call initiated. Vapi Call ID: {call_data.get('id')}"
                         ))
                         db.commit()
-                else: # Fallback if no phone number
-                    lead.nurture_attempts += 1
-                    db.commit() # Increment attempt to move to the next step
+                    else:
+                        lead.nurture_attempts += 1
+                        db.commit()
 
             # --- Attempt 4: Final Email (e.g., 6 days after initial contact) ---
-            elif lead.nurture_attempts == 3 and time_since_last_update > timedelta(days=2): # 2 days after call attempt
-                content = generate_follow_up_content(lead, attempt_number=4, kb_info=kb_info)
+            elif lead.nurture_attempts == 3 and time_since_last_update > timedelta(day=3):
+                content = generate_follow_up_content(lead, attempt_number=4)
+                
+                # Populate the main HTML template with our generated content
+                context = {"first_name": lead.first_name, "personalized_content": content['body_html']}
+                final_html_body = load_and_populate_template('nurture_email.html', context)
+                
                 reply_domain = os.getenv("REPLY_DOMAIN")
                 tracking_reply_to = f"replies+{str(lead.id)}@{reply_domain}"
                 
-                if send_email(lead.email, content['subject'], content['body_plain'], html_body=content['body_html'], reply_to_address=tracking_reply_to):
+                if send_email(lead.email, content['subject'], "", html_body=final_html_body, reply_to_address=tracking_reply_to):
                     lead.nurture_attempts += 1
                     crud.create_communication_log(db, schemas.CommunicationCreate(
                         lead_id=lead.id, type=CommTypeEnum.email, direction=CommDirectionEnum.outgoing_auto, content=f"Subject: {content['subject']}\n\n{content['body_plain']}"
                     ))
                     db.commit()
 
-            # --- Archive Lead (if all attempts are exhausted) ---
+            # --- Archive Lead (logic remains the same) ---
             elif lead.nurture_attempts >= 4:
                 print(f"Archiving Lead ID: {lead.lead_id} after all attempts.")
                 crud.update_lead_status(db, lead_id=lead.id, status=LeadStatusEnum.archived_no_response)
-
     finally:
         db.close()
