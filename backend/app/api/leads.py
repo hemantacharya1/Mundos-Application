@@ -72,18 +72,6 @@ def upload_leads_csv(
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the file: {e}")
     
 
-# @router.get("/", response_model=List[schemas.Lead])
-# def read_leads(status: schemas.LeadStatusEnum | None = None, db: Session = Depends(get_db)):
-#     """
-#     Retrieves a list of leads.
-#     Can be filtered by status (e.g., 'needs_immediate_attention', 'responded').
-#     """
-#     if status:
-#         leads = db.query(models.Lead).filter(models.Lead.status == status).order_by(models.Lead.created_at.desc()).all()
-#     else:
-#         leads = db.query(models.Lead).order_by(models.Lead.created_at.desc()).all()
-#     return leads
-
 @router.put("/{lead_id}/status", response_model=schemas.Lead)
 def update_lead_status_endpoint(
     lead_id: str,

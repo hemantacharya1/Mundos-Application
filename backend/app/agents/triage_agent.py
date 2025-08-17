@@ -133,8 +133,6 @@ def kb_lookup_node(state: GraphState):
     # Process the results into a clean string for the next LLM prompt.
     context_str = "Here is some potentially relevant information from our knowledge base:\n"
     for i, result in enumerate(search_results):
-        # # Check if the score is high enough to be considered relevant
-        # if result.get('score', 0) >: # You can adjust this threshold
         context_str += f"\n- {result['content']}\n"
     
     print(f"Found KB info: {context_str}")
