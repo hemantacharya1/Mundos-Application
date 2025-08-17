@@ -17,11 +17,6 @@ def make_tool_based_vapi_call(lead: Lead):
     
     # Construct the full, secret URL for the tool handler webhook
     SERVER_BASE_URL = os.getenv("SERVER_BASE_URL")
-    # SECRET_PATH = os.getenv("WEBHOOK_SECRET_PATH")
-    
-    # if not SERVER_BASE_URL or not SECRET_PATH:
-    #     print("ERROR: SERVER_BASE_URL and WEBHOOK_SECRET_PATH must be set in .env")
-    #     raise ValueError("Server URL or Webhook Secret Path not configured.")
         
     tool_handler_url = f"{SERVER_BASE_URL}/api/webhooks/vapi-tool-handler"
 

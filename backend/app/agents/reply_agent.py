@@ -280,7 +280,6 @@ def run_reply_analyzer(lead_id: str):
             first_name=lead.first_name,
             messages=initial_messages
         )
-        
         print(f"\n--- INVOKING GRAPH FOR LEAD: {lead.first_name} ({lead_id}) ---\n")
         reply_app_graph.invoke(initial_state)
         print(f"\n--- GRAPH EXECUTION FINISHED FOR LEAD: {lead.first_name} ({lead_id}) ---\n")

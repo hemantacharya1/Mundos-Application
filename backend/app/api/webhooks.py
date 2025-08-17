@@ -30,11 +30,17 @@ async def handle_email_reply(
     1. Halts the nurture sequence by updating status to 'responded'.
     2. Triggers the Reply Intent Analyzer agent in the background.
     """
-    print(request)
-    print('='*500)
+    
     form_data = await request.form()
     to_address = form_data.get('to', '')
     email_body = form_data.get('text', '')
+    subject = form_data.get('subject','')
+    reply_only = re.split(r"On .*wrote:", email_body, flags=re.DOTALL)[0]
+    reply_only = "\n".join(
+        line for line in reply_only.splitlines()
+        if not line.strip().startswith(">")
+    ).strip()
+    reply_only = f'User reply: {reply_only}'
 
     match = re.search(r'\+(.*?)\@', to_address)
     if not match:
@@ -51,13 +57,12 @@ async def handle_email_reply(
             lead_id=lead.id,
             type=CommTypeEnum.email,
             direction=CommDirectionEnum.incoming,
-            content=email_body
+            content=reply_only
         ))
 
     # Only process if the lead is currently being nurtured
     if lead.status == models.LeadStatusEnum.nurturing:
         crud.update_lead_status(db, lead_id=lead.id, status=models.LeadStatusEnum.responded)
-        print(f"Lead {lead.lead_id} status updated to 'responded'. Nurture sequence halted.")
 
         # --- CRITICAL STEP 2: Trigger the AI analyzer in the background ---
     background_tasks.add_task(run_reply_analyzer, lead_id=str(lead.id))
