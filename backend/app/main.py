@@ -40,9 +40,9 @@ scheduler = BackgroundScheduler()
 def start_scheduler():
     # For testing, run the job every 1 minute.
     # For production, you would change this to 'cron', day_of_week='mon-sun', hour=9
-    scheduler.add_job(nurture_and_recall_job, 'interval', minutes=10, id="nurture_job")
+    scheduler.add_job(nurture_and_recall_job, 'interval', minutes=1, id="nurture_job")
     scheduler.start()
-    print("Scheduler started... Nurture job will run every 10 minute for testing.")
+    print("Scheduler started... Nurture job will run every 1 minute for testing.")
 
 @app.on_event("shutdown")
 def shutdown_scheduler():
@@ -59,13 +59,3 @@ app.include_router(knowledge_base.router, prefix="/api")
 @app.get("/", tags=["Root"])
 def read_root():
     return {"message": "Welcome to the Bright Smile Clinic API"}
-
-
-
-# @app.post("/api/webhooks/email-reply")
-# async def email_reply(request: Request):
-#     data = await request.form()
-#     print("\n📩 Incoming Email Payload:")
-#     for key, value in data.items():
-#         print(f"{key}: {value}\n")
-#     return {"status": "received"}
