@@ -198,16 +198,16 @@ def get_lead_conversion_probability(lead_id: str) -> int | None:
             print("No communications found for this lead. Cannot perform analysis.")
             return None
 
-        customer_messages = [c.content for c in comms if c.direction == models.CommDirectionEnum.incoming]
-        agent_messages = [c.content for c in comms if c.direction == models.CommDirectionEnum.outgoing_auto]
+        customer_message = next((c.content for c in reversed(comms) if c.direction == models.CommDirectionEnum.incoming),None)
+        agent_message = next((c.content for c in reversed(comms) if c.direction == models.CommDirectionEnum.outgoing_auto),None)
         
-        if not customer_messages:
+        if not customer_message:
             print("No customer messages found. Cannot perform analysis.")
             return None
 
         # --- KEY CHANGE: Call the summarizer ONCE to get both summaries ---
         print("Generating conversation summaries...")
-        summaries = _get_conversation_summaries(agent_messages=agent_messages, user_messages=customer_messages)
+        summaries = _get_conversation_summaries(agent_messages=agent_message, user_messages=customer_message)
         
         # Extract the summaries from the returned dictionary
         customer_summary = summaries.get("user_summary", "Summary not available.")
@@ -237,14 +237,14 @@ def get_lead_conversion_probability(lead_id: str) -> int | None:
 
         data = response.json()
         conversion_probability = data.get("conversion_probability")
-        
-        if conversion_probability is not None:
-            percentage = int(conversion_probability * 100)
-            print(f"Analysis complete. Conversion probability: {percentage}%")
-            return percentage
-        else:
-            print("API response did not contain 'conversion_probability'.")
-            return None
+        print(dict(data))
+        # if conversion_probability is not None:
+        #     percentage = int(conversion_probability * 100)
+        #     print(f"Analysis complete. Conversion probability: {percentage}%")
+        #     return percentage
+        # else:
+        #     print("API response did not contain 'conversion_probability'.")
+        return None
 
     except requests.RequestException as e:
         print(f"Error calling the risk analysis API: {e}")

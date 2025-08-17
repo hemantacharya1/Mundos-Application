@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from .. import crud, schemas, clinic_tools
 from ..database import SessionLocal
 from ..models import LeadStatusEnum, CommTypeEnum, CommDirectionEnum
-from ..utils import knowledge_base_semantic_search, send_email,get_lead_conversion_probability
+from ..utils import knowledge_base_semantic_search, send_email
 from ..agents.triage_agent import load_and_populate_template
 
 # --- 1. Define Tools using the @tool decorator ---
@@ -280,8 +280,6 @@ def run_reply_analyzer(lead_id: str):
             first_name=lead.first_name,
             messages=initial_messages
         )
-        res=get_lead_conversion_probability(lead_id=lead.id)
-        print("percentage h bhaiii","-"*50,res)
         print(f"\n--- INVOKING GRAPH FOR LEAD: {lead.first_name} ({lead_id}) ---\n")
         reply_app_graph.invoke(initial_state)
         print(f"\n--- GRAPH EXECUTION FINISHED FOR LEAD: {lead.first_name} ({lead_id}) ---\n")
