@@ -40,7 +40,7 @@ scheduler = BackgroundScheduler()
 def start_scheduler():
     # For testing, run the job every 1 minute.
     # For production, you would change this to 'cron', day_of_week='mon-sun', hour=9
-    scheduler.add_job(nurture_and_recall_job, 'interval', day=1, id="nurture_job")
+    scheduler.add_job(nurture_and_recall_job, 'interval', days=1, id="nurture_job")
     scheduler.start()
     print("Scheduler started... Nurture job will run every 1 minute for testing.")
 
