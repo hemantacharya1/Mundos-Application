@@ -19,7 +19,10 @@ app = FastAPI(
 
 origins = [
     "http://localhost:3000",
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "https://mundos-application.vercel.app",
+    "https://mundos-application-h8irzo90s-hemant-acharyas-projects.vercel.app",
+    "https://mundos-application-git-main-hemant-acharyas-projects.vercel.app"
 ]
 
 app.add_middleware(
