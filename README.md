@@ -157,6 +157,9 @@ PINECONE_INDEX_NAME="your_pinecone_index_name"
 
 # Public URL for Webhooks (during local testing, this is your ngrok URL)
 SERVER_BASE_URL="https://<your-id>.ngrok-free.app"
+
+# Risk analysis service url
+RISK_ANALYSIS_API_URL="https://<ngrok or deployed url>/predict?top_k=3"
 ```
 
 ## ▶️ Running the Application
