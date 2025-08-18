@@ -81,3 +81,7 @@ class BookSlotRequest(BaseModel):
     lead_id: UUID
     reason_for_visit: str
     booked_by_method: str
+
+class RiskAnalysisResponse(BaseModel):
+    predicted_label: str
+    probability_percent: float
