@@ -146,9 +146,6 @@ SENDER_EMAIL="your_verified_sender_email@yourdomain.com"
 # Domain for Inbound Email Replies
 REPLY_DOMAIN="replies.yourdomain.com"
 
-# Webhook Security (generate a UUID for this)
-WEBHOOK_SECRET_PATH="your-secret-uuid-here"
-
 # VAPI Voice AI Configuration
 VAPI_API_KEY="your_vapi_api_key_here"
 VAPI_PHONE_NUMBER_ID="your_vapi_phone_number_id_here"
