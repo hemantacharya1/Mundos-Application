@@ -408,10 +408,10 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                 <CardTitle className="text-sm">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 pt-0">
-                <Button size="sm" className="w-full gap-2 h-8">
+                {/* <Button size="sm" className="w-full gap-2 h-8">
                   <Mail className="h-3 w-3" />
                   Send SMS
-                </Button>
+                </Button> */}
                 <Button 
                   size="sm" 
                   className="w-full gap-2 h-8" 
@@ -425,10 +425,10 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                   )}
                   {isCalling ? "Calling..." : "Call Lead"}
                 </Button>
-                <Button size="sm" className="w-full gap-2 h-8">
+                {/* <Button size="sm" className="w-full gap-2 h-8">
                   <Mailbox className="h-3 w-3" />
                   Send WhatsApp
-                </Button>
+                </Button> */}
               </CardContent>
             </Card>
           </div>
