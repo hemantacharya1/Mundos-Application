@@ -78,7 +78,7 @@ Mundos is built on a modern, decoupled, API-first architecture.
 | **Database**  | PostgreSQL                                      |
 | **AI/ML**     | LangGraph, OpenAI (GPT-4o), Pinecone (Vector DB)|
 | **Voice AI**  | Vapi.ai                                         |
-| **Deployment**| Vercel (Frontend), [Your Backend Host]          |
+| **Deployment**| Vercel (Frontend), AWS (Backend)          |
 
 ---
 
