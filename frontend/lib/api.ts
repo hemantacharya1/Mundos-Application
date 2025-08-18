@@ -199,6 +199,12 @@ export interface SearchResponse {
   total_results: number;
 }
 
+// Risk Analysis Types
+export interface RiskAnalysis {
+  predicted_label: string;
+  probability_percent: number;
+}
+
 // API Service Class
 class ApiService {
   private baseUrl: string;
@@ -274,6 +280,10 @@ class ApiService {
 
   async getLeadCommunications(leadId: string): Promise<Communication[]> {
     return this.request<Communication[]>(`/api/leads/${leadId}/communications`);
+  }
+
+  async getLeadRiskAnalysis(leadId: string): Promise<RiskAnalysis> {
+    return this.request<RiskAnalysis>(`/api/leads/${leadId}/risk-analysis`);
   }
 
 
