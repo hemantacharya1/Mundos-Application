@@ -184,10 +184,9 @@ def _get_conversation_summaries(agent_messages: List[str], user_messages: List[s
 
 
 # --- 2. UPDATED MAIN FUNCTION ---
-def get_lead_conversion_probability(lead_id: str) -> int | None:
+def get_lead_conversion_probability(lead_id: str) -> dict | None:
     """
-    Analyzes a lead's conversation history to predict the probability of conversion.
-    This version uses a single LLM call to generate both summaries.
+    Analyzes a lead's FULL conversation history to predict the probability of conversion.
     """
     print(f"--- Starting Conversion Probability Analysis for Lead ID: {lead_id} ---")
     db = SessionLocal()
@@ -198,30 +197,28 @@ def get_lead_conversion_probability(lead_id: str) -> int | None:
             print("No communications found for this lead. Cannot perform analysis.")
             return None
 
-        customer_message = next((c.content for c in reversed(comms) if c.direction == models.CommDirectionEnum.incoming),None)
-        agent_message = next((c.content for c in reversed(comms) if c.direction == models.CommDirectionEnum.outgoing_auto),None)
+        # --- KEY FIX: Collect ALL messages for a complete history ---
+        user_messages = [c.content for c in comms if c.direction == models.CommDirectionEnum.incoming]
+        # Extract just the body of the AI's messages for a cleaner history
+        agent_messages = [c.content.split('\n\n', 1)[-1] for c in comms if c.direction == models.CommDirectionEnum.outgoing_auto]
         
-        if not customer_message:
+        if not user_messages:
             print("No customer messages found. Cannot perform analysis.")
             return None
 
-        # --- KEY CHANGE: Call the summarizer ONCE to get both summaries ---
-        print("Generating conversation summaries...")
-        summaries = _get_conversation_summaries(agent_messages=agent_message, user_messages=customer_message)
+        print("Generating conversation summaries from full history...")
+        summaries = _get_conversation_summaries(agent_messages=agent_messages, user_messages=user_messages)
         
-        # Extract the summaries from the returned dictionary
-        customer_summary = summaries.get("user_summary", "Summary not available.")
-        agent_summary = summaries.get("agent_summary", "Summary not available.")
+        customer_summary = summaries.get("user_summary")
+        agent_summary = summaries.get("agent_summary")
+        
+        if not customer_summary or "Error" in customer_summary:
+            print("Aborting analysis due to summarization error.")
+            return None
         
         print(f"Customer Summary: {customer_summary}")
         print(f"Agent Summary: {agent_summary}")
 
-        # Check if summarization failed
-        if "Error" in customer_summary:
-            print("Aborting analysis due to summarization error.")
-            return None
-
-        # Prepare and send the request to your ML model's API
         payload = {
             "customer_summary": customer_summary,
             "agent_summary": agent_summary
@@ -235,16 +232,11 @@ def get_lead_conversion_probability(lead_id: str) -> int | None:
         response = requests.post(RISK_ANALYSIS_API_URL, json=payload, headers=headers)
         response.raise_for_status()
 
-        data = response.json()
-        conversion_probability = data.get("conversion_probability")
-        print(dict(data))
-        # if conversion_probability is not None:
-        #     percentage = int(conversion_probability * 100)
-        #     print(f"Analysis complete. Conversion probability: {percentage}%")
-        #     return percentage
-        # else:
-        #     print("API response did not contain 'conversion_probability'.")
-        return None
+        # --- KEY FIX: Return the entire JSON data from the ML model ---
+        # The API endpoint will be responsible for parsing this.
+        prediction_data = response.json()
+        print("Successfully received prediction from ML model.")
+        return prediction_data
 
     except requests.RequestException as e:
         print(f"Error calling the risk analysis API: {e}")

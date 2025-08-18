@@ -4,7 +4,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi import Query, Body # Add these imports
 from ..agents.triage_agent import run_triage_agent # Ensure this is imported
-from ..utils import send_email # Ensure this is imported
+from ..utils import send_email,get_lead_conversion_probability # Ensure this is imported
 from sqlalchemy.orm import Session
 from .. import models, schemas, crud,voice_utils
 from ..database import get_db
@@ -235,3 +235,35 @@ def test_tool_based_ai_call(lead_id: str, db: Session = Depends(get_db)):
     crud.create_communication_log(db, comm=comm_log)
 
     return {"status": "success", "message": "Test AI call initiated.", "vapi_call_id":vapi_call_id}
+
+@router.get("/{lead_id}/risk-analysis", response_model=schemas.RiskAnalysisResponse)
+def get_risk_analysis(lead_id: str, db: Session = Depends(get_db)):
+    """
+    Performs a risk analysis on a lead's conversation history to predict
+    their interest level and probability of conversion.
+    """
+    lead = crud.get_lead_by_id(db, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    print('*'*200)
+    # Call the corrected main analysis function from utils.py
+    prediction_data = get_lead_conversion_probability(lead_id=lead_id)
+    print(prediction_data)
+    if not prediction_data:
+        raise HTTPException(status_code=500, detail="Failed to perform risk analysis. Check server logs for details.")
+
+    try:
+        # Extract the required information from the ML model's response
+        predicted_label = prediction_data["predicted_label"]
+        predicted_prob = prediction_data["predicted_prob"]
+        
+        # Format the response into the clean structure our frontend expects
+        response_data = {
+            "predicted_label": predicted_label,
+            "probability_percent": round(predicted_prob * 100, 2)
+        }
+        return response_data
+    except KeyError as e:
+        print(f"ML model response was missing an expected key: {e}")
+        raise HTTPException(status_code=500, detail="Analysis failed due to unexpected data format from the ML model.")
