@@ -36,10 +36,10 @@ import {
   formatTimeAgo, 
   formatWaitingTime 
 } from "@/lib/conversation-utils"
-import { useState, use } from "react"
+import { useState, use, useEffect } from "react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { useToast } from "@/hooks/use-toast"
-import { apiService } from "@/lib/api"
+import { apiService, RiskAnalysis } from "@/lib/api"
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -48,6 +48,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [isSending, setIsSending] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [isCalling, setIsCalling] = useState(false);
+  const [riskAnalysis, setRiskAnalysis] = useState<RiskAnalysis | null>(null);
+  const [isLoadingRiskAnalysis, setIsLoadingRiskAnalysis] = useState(false);
+  const [hasAttemptedRiskAnalysis, setHasAttemptedRiskAnalysis] = useState(false);
   const { toast } = useToast();
 
   const handleSendMessage = async () => {
@@ -96,6 +99,33 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       setIsCalling(false);
     }
   };
+
+  const loadRiskAnalysis = async () => {
+    if (!lead || isLoadingRiskAnalysis) return;
+    
+    setIsLoadingRiskAnalysis(true);
+    setHasAttemptedRiskAnalysis(true);
+    try {
+      const analysis = await apiService.getLeadRiskAnalysis(lead.id);
+      setRiskAnalysis(analysis);
+    } catch (error) {
+      console.error("Failed to load risk analysis:", error);
+      toast({
+        title: "Risk Analysis Failed",
+        description: "Failed to load risk analysis. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingRiskAnalysis(false);
+    }
+  };
+
+  // Load risk analysis when lead data is available (only once)
+  useEffect(() => {
+    if (lead && !hasAttemptedRiskAnalysis && !isLoadingRiskAnalysis) {
+      loadRiskAnalysis();
+    }
+  }, [lead, hasAttemptedRiskAnalysis, isLoadingRiskAnalysis]);
 
   if (isLoading) {
     return (
@@ -383,6 +413,83 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                 </CardContent>
               </Card>
             )}
+
+            {/* Risk Analysis - Compact */}
+            <Card className="glass-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <AlertCircle className="h-3 w-3 text-orange-500" />
+                  Risk Analysis
+                  {isLoadingRiskAnalysis && (
+                    <LoadingSpinner size="sm" className="text-muted-foreground" />
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {isLoadingRiskAnalysis ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </div>
+                ) : riskAnalysis ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium">Risk Level</span>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs px-2 py-0.5 ${
+                          riskAnalysis.predicted_label === 'high_interest'
+                            ? 'border-green-500 text-green-500' 
+                            : riskAnalysis.predicted_label === 'mild_interest'
+                            ? 'border-orange-500 text-orange-500'
+                            : 'border-red-500 text-red-500'
+                        }`}
+                      >
+                        {riskAnalysis.predicted_label.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium">Confidence</span>
+                      <span className={`text-xs font-bold ${
+                        riskAnalysis.probability_percent >= 80 ? 'text-green-500' : 
+                        riskAnalysis.probability_percent >= 60 ? 'text-orange-500' : 'text-red-500'
+                      }`}>
+                        {riskAnalysis.probability_percent}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                      <div 
+                        className={`h-1.5 rounded-full ${
+                          riskAnalysis.probability_percent >= 80 ? 'bg-green-500' : 
+                          riskAnalysis.probability_percent >= 60 ? 'bg-orange-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${riskAnalysis.probability_percent}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-2">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {hasAttemptedRiskAnalysis ? "Failed to load risk analysis" : "No risk analysis available"}
+                    </p>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="w-full h-6 text-xs"
+                      onClick={loadRiskAnalysis}
+                      disabled={isLoadingRiskAnalysis}
+                    >
+                      {isLoadingRiskAnalysis ? (
+                        <LoadingSpinner size="sm" className="text-muted-foreground" />
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
+                      {hasAttemptedRiskAnalysis ? "Retry Analysis" : "Analyze Risk"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* AI Drafted Reply - Compact */}
             {/* {lead.ai_drafted_reply && (
