@@ -110,11 +110,11 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       setRiskAnalysis(analysis);
     } catch (error) {
       console.error("Failed to load risk analysis:", error);
-      toast({
-        title: "Risk Analysis Failed",
-        description: "Failed to load risk analysis. Please try again later.",
-        variant: "destructive",
-      });
+      // toast({
+      //   title: "Risk Analysis Failed",
+      //   description: "Failed to load risk analysis. Please try again later.",
+      //   variant: "destructive",
+      // });
     } finally {
       setIsLoadingRiskAnalysis(false);
     }
@@ -470,7 +470,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
                 ) : (
                   <div className="text-center py-2">
                     <p className="text-xs text-muted-foreground mb-2">
-                      {hasAttemptedRiskAnalysis ? "Failed to load risk analysis" : "No risk analysis available"}
+                      {hasAttemptedRiskAnalysis ? "No risk analysis available" : "No risk analysis available"}
                     </p>
                     <Button 
                       size="sm" 
