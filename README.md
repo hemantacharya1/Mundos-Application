@@ -173,7 +173,7 @@ The backend will be available at http://localhost:8000. The API docs are at http
 
 ### Run the Frontend Server:
 ```bash
-# From the frontend/ directory
+# From frontend/ directory
 npm run dev
 ```
 The frontend will be available at http://localhost:3000.
