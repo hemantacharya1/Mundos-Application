@@ -184,3 +184,6 @@ The frontend will be available at http://localhost:3000.
 ngrok http 8000
 ```
 Use the public https://... URL provided by ngrok as your `SERVER_BASE_URL` in the `.env` file and for configuring your SendGrid and Vapi webhooks.
+
+```
+To Use the ML Model(risk analyzer) use this repository code **[ML Model github repo.](https://github.com/Ramjayanth123/mundos-risk-analysis)**
