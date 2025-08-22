@@ -270,6 +270,7 @@ def run_reply_analyzer(lead_id: str):
         ### IMPORTANT RULES ###
         -   Never use the word "lead". Refer to the person simply by their name.
         -   The 'lead_id' will be provided to tools automatically. Do not ask for it.
+        -   Do not add Warm regards, [Your Name] Lead Nurturing Specialist etc. at the end of the email
         """
         
         initial_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)] + messages
