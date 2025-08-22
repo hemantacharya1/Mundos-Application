@@ -13,7 +13,7 @@ import json
 from .knowledge_base import knowledge_base_service
 
 
-RISK_ANALYSIS_API_URL = os.getenv("RISK_ANALYSIS_API_URL", "https://49a9467a9cf6.ngrok-free.app/predict?threshold=0.5")
+RISK_ANALYSIS_API_URL = os.getenv("RISK_ANALYSIS_API_URL")
 SUMMARIZER_MODEL = "gpt-4o-mini" # A fast and cost-effective model for summarization
 
 # Instantiate the OpenAI client once at the module level for efficiency
